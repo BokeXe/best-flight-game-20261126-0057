@@ -3,7 +3,7 @@
 // lights, mission banner, minimap and the off-screen target arrow.
 
 import { headingDegrees, STALL_SPEED } from './flight-model.js';
-import { RUNWAY, CITY_CENTRE, HARBOR, LIGHTHOUSE, WORLD_SIZE, shorelineX } from './terrain.js';
+import { RUNWAY, CITY_CENTRE, HARBOR, LIGHTHOUSE, WORLD_SIZE, shorelineX, AVENUES, CROSS_STREETS, DISTRICTS } from './terrain.js';
 
 // Dusk instrument palette: deep plum panels, warm amber accents and bright
 // ink stay readable against both the bright sunset sky and the dark ground.
@@ -46,11 +46,13 @@ function drawMissionBanner(ctx, width, state) {
   ctx.fillStyle = INK;
   ctx.font = '16px sans-serif';
   ctx.fillText(m.bannerText, width / 2, 63);
-  // Score and clock, top right.
+  // Score, cash and clock, top right.
   panel(ctx, width - 196, 14, 182, 58);
   ctx.textAlign = 'right';
   ctx.fillStyle = INK; ctx.font = 'bold 20px sans-serif';
   ctx.fillText(`SCORE ${state.score}`, width - 28, 40);
+  ctx.fillStyle = GREEN; ctx.font = 'bold 15px sans-serif';
+  ctx.fillText(`$${state.cash ?? 0}`, width - 120, 62);
   ctx.fillStyle = DIM; ctx.font = '15px sans-serif';
   ctx.fillText(`TIME ${formatClock(state.missionTime)}`, width - 28, 62);
 }
@@ -184,6 +186,16 @@ function drawMinimap(ctx, width, height, state) {
   }
   ctx.lineTo(x + size, y + size); ctx.lineTo(x + size, y);
   ctx.closePath(); ctx.fill();
+  // City street grid, faint under the district markers.
+  ctx.strokeStyle = 'rgba(255,244,224,0.35)'; ctx.lineWidth = 1;
+  for (const avenueX of AVENUES) {
+    const a = toMap(avenueX, -1040), b = toMap(avenueX, 680);
+    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+  }
+  for (const streetZ of CROSS_STREETS) {
+    const a = toMap(-320, streetZ), b = toMap(540, streetZ);
+    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+  }
   const rw = toMap(RUNWAY.x, (RUNWAY.z0 + RUNWAY.z1) / 2);
   ctx.fillStyle = '#f5f7fa'; ctx.fillRect(rw.x - 2, rw.y - 8, 4, 16);
   const city = toMap(CITY_CENTRE.x, CITY_CENTRE.z);
@@ -192,6 +204,20 @@ function drawMinimap(ctx, width, height, state) {
   ctx.fillStyle = '#7fd4ff'; ctx.beginPath(); ctx.arc(harbor.x, harbor.y, 3, 0, Math.PI * 2); ctx.fill();
   const lh = toMap(LIGHTHOUSE.x, LIGHTHOUSE.z);
   ctx.fillStyle = '#ff5a4d'; ctx.beginPath(); ctx.arc(lh.x, lh.y, 3, 0, Math.PI * 2); ctx.fill();
+  // District labels so the map reads as a city, not a coastline sketch.
+  ctx.fillStyle = 'rgba(255,244,224,0.85)'; ctx.font = 'bold 7.5px sans-serif'; ctx.textAlign = 'center';
+  for (const d of DISTRICTS) {
+    const p = toMap(d.x, d.z);
+    ctx.fillText(d.name, p.x, p.y - 6);
+  }
+  // Remaining mission markers: canyon gates and courier stops.
+  ctx.fillStyle = '#7fd4ff';
+  const markers = state.mission.kind === 'canyon' ? state.mission.rings.slice(state.mission.ringIndex + 1)
+    : state.mission.kind === 'courier' ? state.mission.stops.slice(state.mission.stopIndex + 1) : [];
+  for (const m of markers) {
+    const p = toMap(m.x, m.z);
+    ctx.beginPath(); ctx.arc(p.x, p.y, 2.2, 0, Math.PI * 2); ctx.fill();
+  }
   const target = state.mission.target;
   if (target) {
     const tp = toMap(target.x, target.z);

@@ -28,6 +28,9 @@ export function attachInputListeners(input, canvas) {
     if (key === '1') input.missionChoice = 'rings';
     if (key === '2') input.missionChoice = 'cargo';
     if (key === '3') input.missionChoice = 'landing';
+    if (key === '4') input.missionChoice = 'canyon';
+    if (key === '5') input.missionChoice = 'courier';
+    if (key === '6') input.missionChoice = 'free';
     if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(key)) event.preventDefault();
   });
   window.addEventListener('keyup', (event) => input.keys.delete(event.key.toLowerCase()));

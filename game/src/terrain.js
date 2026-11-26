@@ -16,6 +16,82 @@ export const LIGHTHOUSE = { x: -360, z: -1510 };
 // Low sun over the western sea: the light every dusk colour is mixed against.
 export const SUNSET = { x: -4200, y: 210, z: -1850 };
 
+// Open-world street grid: avenues run north-south parallel to the shore,
+// cross streets step down the coast. Traffic, streetlights and the canyon
+// mission all key off these two lists so the city stays coherent.
+export const AVENUES = [-190, -70, 55, 180, 305, 430];
+export const CROSS_STREETS = [-900, -700, -500, -300, -100, 100, 300, 500];
+
+// Named districts give the free-roam city its geography: the minimap
+// labels them, the courier chain drops in them, and free flight announces
+// the district under the wing.
+export const STADIUM = { x: 520, z: -520 };
+export const DISTRICTS = [
+  { name: 'DOWNTOWN', x: 150, z: -300, r: 340 },
+  { name: 'WATERFRONT', x: -160, z: -80, r: 300 },
+  { name: 'HARBOR', x: -290, z: 150, r: 260 },
+  { name: 'BEACHFRONT', x: -260, z: 620, r: 300 },
+  { name: 'STADIUM', x: STADIUM.x, z: STADIUM.z, r: 250 },
+  { name: 'SUBURBS', x: 780, z: 420, r: 460 },
+  { name: 'AIRFIELD', x: 260, z: 900, r: 320 },
+];
+
+export function districtAt(x, z) {
+  let best = null, bestScore = Infinity;
+  for (const d of DISTRICTS) {
+    const dist = Math.hypot(x - d.x, z - d.z) / d.r;
+    if (dist < bestScore) { bestScore = dist; best = d; }
+  }
+  return bestScore <= 1.6 ? best.name : 'SOLMERE COAST';
+}
+
+// Dusk traffic: simple cars driving the avenues and cross streets. Each
+// car is a pure function of mission time (offset + speed * t, wrapped),
+// so the city moves identically in live play and in screenshot scenes.
+export function buildTraffic(seed) {
+  const random = makeSeededRandom(seed ^ 0x7a11c);
+  const palette = [
+    [0.85, 0.3, 0.22], [0.25, 0.45, 0.8], [0.9, 0.85, 0.75], [0.3, 0.7, 0.4],
+    [0.95, 0.65, 0.2], [0.55, 0.4, 0.75], [0.8, 0.8, 0.85], [0.2, 0.25, 0.35],
+  ];
+  const cars = [];
+  for (const avenueX of AVENUES) {
+    for (let i = 0; i < 7; i++) {
+      const dir = random() < 0.5 ? 1 : -1;
+      cars.push({
+        axis: 'z', road: avenueX, lane: dir > 0 ? 5.5 : -5.5, dir,
+        speed: 8 + random() * 6, offset: -1020 + random() * 1700,
+        color: palette[Math.floor(random() * palette.length)],
+      });
+    }
+  }
+  for (const streetZ of CROSS_STREETS) {
+    for (let i = 0; i < 4; i++) {
+      const dir = random() < 0.5 ? 1 : -1;
+      cars.push({
+        axis: 'x', road: streetZ, lane: dir > 0 ? -5 : 5, dir,
+        speed: 7 + random() * 5, offset: -320 + random() * 860,
+        color: palette[Math.floor(random() * palette.length)],
+      });
+    }
+  }
+  return cars;
+}
+
+export function trafficPose(car, time, heights) {
+  // Returns world position + heading for one car at a mission time.
+  if (car.axis === 'z') {
+    const span = 1700;
+    const z = -1020 + ((car.offset + car.dir * car.speed * time) % span + span) % span;
+    const x = car.road + car.lane;
+    return { x, y: terrainHeightAt(heights, x, z) + 0.9, z, heading: car.dir > 0 ? Math.PI : 0 };
+  }
+  const span = 860;
+  const x = -320 + ((car.offset + car.dir * car.speed * time) % span + span) % span;
+  const z = car.road + car.lane;
+  return { x, y: terrainHeightAt(heights, x, z) + 0.9, z, heading: car.dir > 0 ? Math.PI / 2 : -Math.PI / 2 };
+}
+
 function makeSeededRandom(seed) {
   let state = seed >>> 0;
   return function nextRandom() {
@@ -221,6 +297,21 @@ export function buildCityBuildings(seed) {
           litSeed: Math.floor(random() * 997),
         });
       }
+    }
+  }
+  // Suburban blocks east and south: low houses on the rising ground so
+  // the open world keeps reading as a city beyond the downtown shelf.
+  for (let gx = 560; gx <= 1060; gx += 96) {
+    for (let gz = -160; gz <= 780; gz += 96) {
+      if (random() < 0.3) continue;
+      if (Math.hypot(gx - STADIUM.x, gz - STADIUM.z) < 190) continue;
+      const height = 6 + random() * 8;
+      buildings.push({
+        x: gx + (random() - 0.5) * 26, z: gz + (random() - 0.5) * 26,
+        width: 16 + random() * 14, depth: 14 + random() * 12,
+        height, hue: 20 + random() * 26, roofHue: 215 + random() * 30,
+        tower: false, litSeed: Math.floor(random() * 997),
+      });
     }
   }
   // Landmark towers anchor the skyline in every screenshot: the central

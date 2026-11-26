@@ -11,6 +11,7 @@ import {
 import {
   buildTerrainGeometry, buildCityGeometry, buildRunwayGeometry,
   buildHarborGeometry, buildStreetlightPoints, buildCloudBillboards,
+  buildStreetsGeometry, buildLandmarksGeometry, buildCarGeometry,
 } from './gl-world.js';
 import {
   buildAircraftGeometry, buildElevonGeometry, buildExhaustGeometry,
@@ -20,7 +21,7 @@ import {
   perspectiveMatrix, viewMatrixFromBasis, multiplyMatrices,
   bodyMatrix, facingMatrix, translateMatrix, identityMatrix,
 } from './math3d.js';
-import { SUNSET, terrainHeightAt } from './terrain.js';
+import { SUNSET, terrainHeightAt, trafficPose } from './terrain.js';
 
 const SUN_DIR = normalize([SUNSET.x, SUNSET.y * 2.2, SUNSET.z]);
 const FOG_COLOR = [0.72, 0.44, 0.38];
@@ -52,8 +53,18 @@ class WebglRenderer {
     if (!this.sky || !this.sea || !this.lit || !this.billboard || !this.points) return;
     this.terrain = uploadGeometry(gl, buildTerrainGeometry(state.heights));
     this.city = uploadGeometry(gl, buildCityGeometry(state.buildings, state.heights));
+    this.streets = uploadGeometry(gl, buildStreetsGeometry(state.heights));
+    this.landmarks = uploadGeometry(gl, buildLandmarksGeometry(state.heights));
     this.runway = uploadGeometry(gl, buildRunwayGeometry());
     this.harbor = uploadGeometry(gl, buildHarborGeometry(state.heights));
+    // One car mesh per paint colour; traffic poses come from mission time.
+    this.carMeshes = new Map();
+    for (const car of state.traffic) {
+      const key = car.color.join(',');
+      if (!this.carMeshes.has(key)) this.carMeshes.set(key, uploadGeometry(gl, buildCarGeometry(car.color)));
+    }
+    this.trailLeft = [];
+    this.trailRight = [];
     this.aircraft = uploadGeometry(gl, buildAircraftGeometry());
     this.elevonLeft = uploadGeometry(gl, buildElevonGeometry(-1));
     this.elevonRight = uploadGeometry(gl, buildElevonGeometry(1));
@@ -90,9 +101,12 @@ class WebglRenderer {
     this.drawSky(view, fov, aspect);
     this.drawSea(viewProj, camPos, state.time);
     this.drawLit(this.terrain, viewProj, identityMatrix(), camPos, false);
+    this.drawLit(this.streets, viewProj, identityMatrix(), camPos, false);
     this.drawLit(this.runway, viewProj, identityMatrix(), camPos, false);
     this.drawLit(this.harbor, viewProj, identityMatrix(), camPos, false);
+    this.drawLit(this.landmarks, viewProj, identityMatrix(), camPos, false);
     this.drawLit(this.city, viewProj, identityMatrix(), camPos, true);
+    this.drawTraffic(state, viewProj, camPos);
     this.drawPoints(this.streetlights, viewProj, camPos, identityMatrix());
     this.drawMissionObjects(state, viewProj, camPos);
     this.drawClouds(view, viewProj);
@@ -142,8 +156,36 @@ class WebglRenderer {
     gl.drawElements(gl.TRIANGLES, geometry.count, gl.UNSIGNED_INT, 0);
   }
 
+  drawTraffic(state, viewProj, camPos) {
+    for (const car of state.traffic) {
+      const pose = trafficPose(car, state.time, state.heights);
+      const mesh = this.carMeshes.get(car.color.join(','));
+      this.drawLit(mesh, viewProj, bodyMatrix(pose.x, pose.y, pose.z, pose.heading, 0, 0), camPos, false);
+    }
+  }
+
   drawMissionObjects(state, viewProj, camPos) {
     const mission = state.mission;
+    if (state.missionKind === 'canyon') {
+      mission.rings.forEach((gate, i) => {
+        const prev = mission.rings[Math.max(0, i - 1)];
+        const next = mission.rings[Math.min(mission.rings.length - 1, i + 1)];
+        const model = facingMatrix(gate.x, gate.y, gate.z, next.x - prev.x, next.z - prev.z);
+        const scaled = multiplyMatrices(model, bodyMatrix(0, 0, 0, 0, 0, 0, gate.radius / 46));
+        this.drawLit(this.ring, viewProj, scaled, camPos, false);
+      });
+    }
+    if (state.missionKind === 'courier') {
+      const t = mission.target;
+      if (t) {
+        const ground = terrainHeightAt(state.heights, t.x, t.z) + 1.2;
+        this.drawLit(this.beacon, viewProj, translateMatrix(t.x, ground, t.z), camPos, false);
+      }
+      if (mission.crate) {
+        const c = mission.crate;
+        this.drawLit(this.crate, viewProj, bodyMatrix(c.x, c.y, c.z, state.time * 0.4, 0, Math.sin(state.time * 1.3) * 0.12), camPos, false);
+      }
+    }
     if (state.missionKind === 'rings') {
       mission.rings.forEach((ring, i) => {
         const prev = mission.rings[Math.max(0, i - 1)];
@@ -213,7 +255,55 @@ class WebglRenderer {
       this.drawLit(geometry, viewProj, multiplyMatrices(model, local), camPos, false);
     }
     this.drawPoints(this.navLights, viewProj, camPos, model);
+    this.drawVaporTrails(state, viewProj, camPos, model);
   }
+
+  // Wingtip vapor: hard turns at speed shed a fading white trail from
+  // each tip, so aggressive flying shows on the airframe and the sky.
+  drawVaporTrails(state, viewProj, camPos, model) {
+    const a = state.aircraft;
+    const shedding = !a.onGround && Math.abs(a.roll) > 0.32 && a.speed > 38;
+    const tips = [[-7.6, 0.3, 2.5], [7.6, 0.3, 2.5]];
+    const trails = [this.trailLeft, this.trailRight];
+    tips.forEach((tip, i) => {
+      if (shedding) {
+        trails[i].push(applyModel(model, tip));
+        if (trails[i].length > 42) trails[i].shift();
+      } else if (trails[i].length) {
+        trails[i].shift();
+      }
+    });
+    const positions = [], colors = [], sizes = [];
+    for (const trail of trails) {
+      trail.forEach((p, i) => {
+        const fade = i / Math.max(1, trail.length);
+        positions.push(p[0], p[1], p[2]);
+        colors.push(0.95, 0.9, 0.88);
+        sizes.push(1.2 + fade * 2.6);
+      });
+    }
+    if (!positions.length) return;
+    const gl = this.gl;
+    if (!this.trailBuffer) this.trailBuffer = uploadPoints(gl, {
+      positions: new Float32Array(3), colors: new Float32Array(3), sizes: new Float32Array(1),
+    });
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.trailBuffer.positions.buffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.DYNAMIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.trailBuffer.colors.buffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colors), gl.DYNAMIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.trailBuffer.sizes.buffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(sizes), gl.DYNAMIC_DRAW);
+    this.trailBuffer.count = sizes.length;
+    this.drawPoints(this.trailBuffer, viewProj, camPos, identityMatrix());
+  }
+}
+
+function applyModel(m, [x, y, z]) {
+  return [
+    m[0] * x + m[4] * y + m[8] * z + m[12],
+    m[1] * x + m[5] * y + m[9] * z + m[13],
+    m[2] * x + m[6] * y + m[10] * z + m[14],
+  ];
 }
 
 function compileProgram(gl, vertexSource, fragmentSource) {

@@ -5,6 +5,7 @@
 
 import {
   WORLD_SIZE, GRID_CELLS, CELL_METRES, RUNWAY, HARBOR, LIGHTHOUSE,
+  AVENUES, CROSS_STREETS, STADIUM,
   groundColour, terrainHeightAt,
 } from './terrain.js';
 
@@ -207,6 +208,108 @@ export function buildHarborGeometry(heights) {
   b.cylinder(LIGHTHOUSE.x, lhBase + 40, LIGHTHOUSE.z, 5, 12, [0.85, 0.3, 0.24], 12);
   b.cylinder(LIGHTHOUSE.x, lhBase + 49, LIGHTHOUSE.z, 4.4, 6, [1, 0.85, 0.45], 10, 1.6);
   b.cylinder(LIGHTHOUSE.x, lhBase + 55, LIGHTHOUSE.z, 5.2, 2.4, [0.2, 0.2, 0.26], 10);
+  return b.build();
+}
+
+// Street grid: dark asphalt ribbons following the city shelf, with pale
+// centre dashes. Avenues and cross streets overlap at intersections, so
+// the grid reads as one network from the air.
+export function buildStreetsGeometry(heights) {
+  const b = new GeometryBuilder();
+  const asphalt = [0.13, 0.13, 0.17];
+  const dash = [0.85, 0.78, 0.55];
+  const seg = 60;
+  for (const avenueX of AVENUES) {
+    for (let z = -1040; z < 680; z += seg) {
+      const y0 = terrainHeightAt(heights, avenueX, z) + 0.35;
+      const y1 = terrainHeightAt(heights, avenueX, z + seg) + 0.35;
+      const ids = [
+        b.vertex(avenueX - 11, y0, z, 0, 1, 0, asphalt),
+        b.vertex(avenueX + 11, y0, z, 0, 1, 0, asphalt),
+        b.vertex(avenueX + 11, y1, z + seg, 0, 1, 0, asphalt),
+        b.vertex(avenueX - 11, y1, z + seg, 0, 1, 0, asphalt),
+      ];
+      b.quad(ids[0], ids[1], ids[2], ids[3]);
+      if ((z / seg) % 2 === 0) stripe(b, avenueX - 0.7, y0 + 0.06, z + 8, 1.4, 16, dash);
+    }
+  }
+  for (const streetZ of CROSS_STREETS) {
+    for (let x = -320; x < 540; x += seg) {
+      const y0 = terrainHeightAt(heights, x, streetZ) + 0.32;
+      const y1 = terrainHeightAt(heights, x + seg, streetZ) + 0.32;
+      const ids = [
+        b.vertex(x, y0, streetZ - 9, 0, 1, 0, asphalt),
+        b.vertex(x + seg, y1, streetZ - 9, 0, 1, 0, asphalt),
+        b.vertex(x + seg, y1, streetZ + 9, 0, 1, 0, asphalt),
+        b.vertex(x, y0, streetZ + 9, 0, 1, 0, asphalt),
+      ];
+      b.quad(ids[0], ids[1], ids[2], ids[3]);
+    }
+  }
+  return b.build();
+}
+
+// Landmarks that make the open world navigable: the stadium ring with
+// floodlights east of downtown, and a suspension bridge across the bay
+// to the lighthouse headland.
+export function buildLandmarksGeometry(heights) {
+  const b = new GeometryBuilder();
+  const base = terrainHeightAt(heights, STADIUM.x, STADIUM.z);
+  // Stadium: an elliptical ring wall, a lit inner bowl and four
+  // floodlight masts whose lamps glow against the dusk.
+  const segs = 28;
+  for (let i = 0; i < segs; i++) {
+    const a0 = (i / segs) * Math.PI * 2, a1 = ((i + 1) / segs) * Math.PI * 2;
+    const p = (a, r, y) => [STADIUM.x + Math.cos(a) * r * 1.25, y, STADIUM.z + Math.sin(a) * r];
+    const wall = [0.5, 0.46, 0.52];
+    const ids = [
+      b.vertex(...p(a0, 86, base), Math.cos(a0), 0, Math.sin(a0), wall),
+      b.vertex(...p(a1, 86, base), Math.cos(a1), 0, Math.sin(a1), wall),
+      b.vertex(...p(a1, 86, base + 26), Math.cos(a1), 0, Math.sin(a1), wall),
+      b.vertex(...p(a0, 86, base + 26), Math.cos(a0), 0, Math.sin(a0), wall),
+    ];
+    b.quad(ids[0], ids[1], ids[2], ids[3]);
+    const rim = [
+      b.vertex(...p(a0, 86, base + 26), 0, 1, 0, [0.9, 0.8, 0.55], 0, 0, 0.7),
+      b.vertex(...p(a1, 86, base + 26), 0, 1, 0, [0.9, 0.8, 0.55], 0, 0, 0.7),
+      b.vertex(...p(a1, 62, base + 14), 0, 1, 0, [0.35, 0.55, 0.3]),
+      b.vertex(...p(a0, 62, base + 14), 0, 1, 0, [0.35, 0.55, 0.3]),
+    ];
+    b.quad(rim[0], rim[1], rim[2], rim[3]);
+  }
+  for (const a of [0.6, 2.2, 3.8, 5.4]) {
+    const mx = STADIUM.x + Math.cos(a) * 100, mz = STADIUM.z + Math.sin(a) * 82;
+    b.box(mx, base + 22, mz, 3, 44, 3, [0.3, 0.3, 0.36]);
+    b.box(mx, base + 46, mz, 12, 4, 3, [1, 0.95, 0.8], 0);
+  }
+  // Bay bridge: deck, two pylons and cable stays crossing the water
+  // toward the lighthouse headland, traffic-ready at dusk.
+  const bz = -1180, deckY = 34;
+  b.box(-470, deckY, bz, 460, 3, 16, [0.32, 0.32, 0.4]);
+  for (const px of [-560, -380]) {
+    b.box(px, deckY + 26, bz, 6, 58, 18, [0.85, 0.45, 0.25]);
+    for (let i = -3; i <= 3; i++) {
+      if (i === 0) continue;
+      b.box(px + i * 26, deckY + 26 - Math.abs(i) * 5, bz, 1.6, 30 - Math.abs(i) * 3, 1.6, [0.9, 0.85, 0.75]);
+    }
+  }
+  for (let x = -690; x <= -250; x += 44) {
+    b.box(x, deckY + 3.4, bz - 7, 2, 2, 2, [1, 0.8, 0.4], 0);
+    b.box(x, deckY + 3.4, bz + 7, 2, 2, 2, [1, 0.8, 0.4], 0);
+  }
+  return b.build();
+}
+
+// One traffic car: body, cabin, glowing headlights and taillights.
+// Built facing -z like the aircraft, drawn per car by model matrix.
+export function buildCarGeometry(color) {
+  const b = new GeometryBuilder();
+  b.box(0, 0.75, 0, 2.1, 0.9, 4.6, color);
+  b.box(0, 1.45, 0.25, 1.8, 0.7, 2.3, [0.16, 0.2, 0.3]);
+  b.box(-0.65, 0.8, -2.32, 0.5, 0.3, 0.08, [1, 0.95, 0.8], 0);
+  b.box(0.65, 0.8, -2.32, 0.5, 0.3, 0.08, [1, 0.95, 0.8], 0);
+  b.box(-0.65, 0.8, 2.32, 0.5, 0.3, 0.08, [1, 0.2, 0.15], 0);
+  b.box(0.65, 0.8, 2.32, 0.5, 0.3, 0.08, [1, 0.2, 0.15], 0);
   return b.build();
 }
 

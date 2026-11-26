@@ -14,16 +14,17 @@ export function shotSceneFromUrl(search) {
 export function applyShotScene(state, scene) {
   const a = state.aircraft;
   if (scene.shot === 'cover') {
-    // Chase view closing on ring 2, banked gently so the V planform shows:
-    // gate centred ahead, lit skyline filling the lower frame, sunset sea
-    // and low sun ahead to the left, instruments lit around the edges.
-    state.missionKind = 'rings';
-    Object.assign(a, { x: 240, y: 225, z: -40, heading: -0.97, pitch: 0.02, roll: -0.08, speed: 62, throttle: 0.66, onGround: false, gearDown: false });
-    state.missionTime = 41;
-    state.score = 150;
-    state.mission.ringIndex = 1;
-    state.mission.target = state.mission.rings[1];
-    state.mission.bannerText = 'Ring 2 of 8 — follow the arrow';
+    // Chase view banking over the downtown avenue canyon: traffic
+    // streaming below, towers either side, the next gate centred ahead,
+    // sunset sea beyond the skyline, instruments lit around the edges.
+    state.missionKind = 'canyon';
+    Object.assign(a, { x: 55, y: 84, z: 645, heading: 0.04, pitch: 0.0, roll: -0.25, speed: 56, throttle: 0.62, onGround: false, gearDown: false });
+    state.missionTime = 38;
+    state.score = 600;
+    state.cash = 360;
+    state.mission.ringIndex = 0;
+    state.mission.target = state.mission.rings[0];
+    state.mission.bannerText = 'Gate 1 of 9 — in the canyon, bonus live';
   } else if (scene.shot === 'panel') {
     // Cockpit view west over the city toward the harbour and sunset sea,
     // instruments lit against the dusk.
@@ -67,7 +68,8 @@ export function autopilotControls(state) {
     while (diff < -Math.PI) diff += Math.PI * 2;
     roll = Math.max(-0.4, Math.min(0.4, diff * 0.8));
   }
-  const targetAltitude = state.missionKind === 'landing' ? 62 : 240;
+  const targetAltitude = state.missionKind === 'landing' ? 62
+    : state.missionKind === 'canyon' ? (target?.y ?? 96) : 240;
   const pitch = Math.max(-0.12, Math.min(0.12, (targetAltitude - a.y) * 0.002));
   return { throttle: a.throttle, pitch, roll, yaw: 0, brake: false, flaps: state.missionKind === 'landing' };
 }

@@ -2,7 +2,7 @@
 // and the render order that ties the sunset coast, aircraft, missions and
 // HUD together.
 
-import { buildCoastalHeightfield, buildCityBuildings, buildCloudField, terrainHeightAt } from './terrain.js';
+import { buildCoastalHeightfield, buildCityBuildings, buildCloudField, buildTraffic, terrainHeightAt } from './terrain.js';
 import { createAircraftState, stepFlightModel, refuelIfParked } from './flight-model.js';
 import { createChaseCamera, updateChaseCamera, buildViewMatrix } from './camera.js';
 import { createWebglRenderer } from './webgl-renderer.js';
@@ -31,6 +31,8 @@ function createGameState(seed) {
     heights,
     buildings: buildCityBuildings(seed),
     clouds: buildCloudField(seed),
+    traffic: buildTraffic(seed),
+    cash: 0,
     aircraft: createAircraftState(missionSpawn('rings')),
     camera: createChaseCamera(),
     missionKind: 'rings',
@@ -55,6 +57,7 @@ function startMission(kind) {
   state.aircraft = createAircraftState(missionSpawn(kind));
   state.camera = createChaseCamera();
   state.score = 0;
+  state.cash = 0;
   state.missionTime = 0;
   state.phase = 'flying';
   state.flash = '';
@@ -93,7 +96,11 @@ function stepGame(dt) {
     state.lastRingIndex = state.mission.ringIndex;
     audio.chime('ring');
   }
-  if (state.dropRequested && state.missionKind === MISSION_CARGO) audio.chime('drop');
+  if (state.dropRequested && (state.missionKind === MISSION_CARGO || state.missionKind === 'courier')) audio.chime('drop');
+  if (state.missionKind === 'canyon' && state.mission.ringIndex !== state.lastRingIndex) {
+    state.lastRingIndex = state.mission.ringIndex;
+    audio.chime('ring');
+  }
   state.missionTime += dt;
   state.time += dt;
   audio.update(state.aircraft.throttle, state.aircraft.speed, state.aircraft.stalled);
@@ -156,17 +163,20 @@ function drawTitleScreen(width, height) {
     '1  RING COURSE · EASY — thread 8 rings over the skyline at sunset',
     '2  CARGO DROP · MEDIUM — deliver to the harbour beacon, mind the breeze',
     '3  PRECISION LANDING · HARD — grease it on the coastal touchdown mark',
+    '4  AVENUE CANYON · HARD — low gates between the downtown towers',
+    '5  COURIER CHAIN · MEDIUM — four district drops against the clock',
+    '6  FREE FLIGHT — roam the whole living city, no finish line',
     '',
     'W/S or wheel throttle · arrows or mouse steer · A/D rudder',
     'Space brake · F flaps · B drop cargo · C camera · P pause · R restart',
     'Hard turns bleed speed and raise the stall — fly smooth, watch fuel',
     'Park on the runway to refuel and repair a bent airframe',
   ];
-  ctx.font = '20px sans-serif';
-  lines.forEach((line, i) => ctx.fillText(line, width / 2, height * 0.36 + i * 34));
+  ctx.font = '19px sans-serif';
+  lines.forEach((line, i) => ctx.fillText(line, width / 2, height * 0.33 + i * 31));
   ctx.fillStyle = '#ffb347';
   ctx.font = 'bold 24px sans-serif';
-  ctx.fillText('Press 1, 2 or 3 to fly', width / 2, height * 0.36 + lines.length * 34 + 26);
+  ctx.fillText('Press 1–6 to fly', width / 2, height * 0.33 + lines.length * 31 + 26);
 }
 
 function drawPausedOverlay(width, height) {
@@ -189,12 +199,12 @@ function drawResultsScreen(width, height) {
   ctx.fillText(state.aircraft.crashed ? 'SORTIE LOST' : 'MISSION COMPLETE', width / 2, height * 0.3);
   ctx.fillStyle = '#eaf3fb';
   ctx.font = '24px sans-serif';
-  ctx.fillText(`Score ${state.score} · Time ${formatClock(state.missionTime)}`, width / 2, height * 0.3 + 48);
+  ctx.fillText(`Score ${state.score} · Cash $${state.cash} · Time ${formatClock(state.missionTime)}`, width / 2, height * 0.3 + 48);
   ctx.font = '20px sans-serif';
   state.mission.resultLines.forEach((line, i) => ctx.fillText(line, width / 2, height * 0.3 + 92 + i * 32));
   ctx.fillStyle = '#ffd34d';
   ctx.font = 'bold 22px sans-serif';
-  ctx.fillText('R fly it again · 1/2/3 choose another mission', width / 2, height * 0.3 + 92 + state.mission.resultLines.length * 32 + 30);
+  ctx.fillText('R fly it again · 1–6 choose another mission', width / 2, height * 0.3 + 92 + state.mission.resultLines.length * 32 + 30);
 }
 
 // Boot: shot scenes run a fixed number of steps, then hold the frame.
@@ -204,10 +214,11 @@ if (scene) {
   state.heights = buildCoastalHeightfield(scene.seed);
   state.buildings = buildCityBuildings(scene.seed);
   state.clouds = buildCloudField(scene.seed);
-  state.mission = createMission(scene.shot === 'cover' ? 'rings' : scene.shot === 'landing' ? 'landing' : 'cargo', state.heights);
+  state.traffic = buildTraffic(scene.seed);
+  state.mission = createMission(scene.shot === 'cover' ? 'canyon' : scene.shot === 'landing' ? 'landing' : 'cargo', state.heights);
   applyShotScene(state, scene);
   for (let i = 0; i < 90; i++) stepGame(1 / 60);
-  state.flash = scene.shot === 'cover' ? 'CLEAN RING +150' : '';
+  state.flash = scene.shot === 'cover' ? 'STREET BONUS +200' : '';
   state.flashUntil = state.time + 10;
   renderGame();
 } else {
