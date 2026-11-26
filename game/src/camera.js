@@ -7,20 +7,24 @@ export function createChaseCamera() {
 
 export function updateChaseCamera(camera, aircraft, dt, cockpitView) {
   if (cockpitView) {
-    camera.x = aircraft.x; camera.y = aircraft.y + 1.4; camera.z = aircraft.z;
+    camera.x = aircraft.x + Math.sin(aircraft.heading) * 1.3;
+    camera.y = aircraft.y + 2.1;
+    camera.z = aircraft.z - Math.cos(aircraft.heading) * 1.3;
     camera.heading = aircraft.heading;
     camera.pitch = aircraft.pitch;
     camera.roll = aircraft.roll;
     camera.primed = true;
     return camera;
   }
-  const back = 17, up = 5.2;
+  const back = 27, up = 7.6;
   const tx = aircraft.x - Math.sin(aircraft.heading) * back;
   const tz = aircraft.z + Math.cos(aircraft.heading) * back;
   const ty = aircraft.y + up;
   if (!camera.primed) {
     camera.x = tx; camera.y = ty; camera.z = tz;
-    camera.heading = aircraft.heading; camera.pitch = aircraft.pitch;
+    camera.heading = aircraft.heading;
+    camera.pitch = aircraft.pitch * 0.55 - 0.3;
+    camera.roll = aircraft.roll * 0.35;
     camera.primed = true;
   }
   const follow = 1 - Math.exp(-dt * 4.2);
@@ -28,7 +32,7 @@ export function updateChaseCamera(camera, aircraft, dt, cockpitView) {
   camera.y += (ty - camera.y) * follow;
   camera.z += (tz - camera.z) * follow;
   camera.heading = angleLerp(camera.heading, aircraft.heading, 1 - Math.exp(-dt * 5.5));
-  camera.pitch += (aircraft.pitch * 0.72 - camera.pitch) * (1 - Math.exp(-dt * 4.5));
+  camera.pitch += (aircraft.pitch * 0.55 - 0.3 - camera.pitch) * (1 - Math.exp(-dt * 4.5));
   camera.roll += (aircraft.roll * 0.35 - camera.roll) * (1 - Math.exp(-dt * 3.5));
   return camera;
 }

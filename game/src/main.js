@@ -5,11 +5,8 @@
 import { buildCoastalHeightfield, buildCityBuildings, buildCloudField, terrainHeightAt } from './terrain.js';
 import { createAircraftState, stepFlightModel, refuelIfParked } from './flight-model.js';
 import { createChaseCamera, updateChaseCamera, buildViewMatrix } from './camera.js';
-import {
-  drawSky, drawSea, drawTerrainMesh, drawRunway, drawCityAndHarbor,
-  drawClouds, drawMissionRings, drawCargoTarget, drawFallingCrate, drawAircraftShadow,
-} from './renderer.js';
-import { drawChaseAircraft, drawCockpitPanel } from './aircraft.js';
+import { createWebglRenderer } from './webgl-renderer.js';
+import { drawCockpitPanel } from './aircraft.js';
 import { drawHud, drawCockpitInstruments, formatClock } from './hud.js';
 import { createMission, updateMission, missionSpawn, isOnRunway, MISSION_CARGO } from './missions.js';
 import { createInputState, attachInputListeners, readControls, consumeOneShotInputs } from './input.js';
@@ -18,8 +15,10 @@ import { shotSceneFromUrl, applyShotScene, autopilotControls } from './shots.js'
 
 const canvas = document.getElementById('game-canvas');
 const ctx = canvas.getContext('2d');
+const glCanvas = document.getElementById('gl-canvas');
 
 const state = createGameState(7);
+const worldRenderer = createWebglRenderer(glCanvas, state);
 const input = createInputState();
 const audio = createAudioEngine();
 attachInputListeners(input, canvas);
@@ -105,30 +104,28 @@ function renderGame() {
   updateChaseCamera(state.camera, state.aircraft, 1 / 60, state.cockpitView);
   const view = buildViewMatrix(state.camera, width, height);
   state.view = view;
-  drawSky(ctx, width, height, view);
-  drawSea(ctx, width, height, view, state.time);
-  drawTerrainMesh(ctx, view, state.heights, state.camera);
-  drawRunway(ctx, view, state.heights);
-  drawCityAndHarbor(ctx, view, state.heights, state.buildings, state.time);
-  if (state.missionKind === 'rings') {
-    drawMissionRings(ctx, view, state.mission.rings, state.mission.ringIndex, state.time);
-  }
-  if (state.missionKind === MISSION_CARGO) {
-    drawCargoTarget(ctx, view, state.mission.target, state.time);
-    drawFallingCrate(ctx, view, state.mission.crate);
-  }
-  if (!state.cockpitView) drawAircraftShadow(ctx, view, state.aircraft, state.heights);
-  drawClouds(ctx, view, state.clouds);
+  ctx.clearRect(0, 0, width, height);
+  if (worldRenderer) worldRenderer.render(state, view);
+  else drawWebglFallback(width, height);
   if (state.cockpitView) {
     drawCockpitPanel(ctx, width, height, state.aircraft, drawCockpitInstruments);
-  } else {
-    drawChaseAircraft(ctx, width, height, state.aircraft, state.time);
   }
   drawHud(ctx, width, height, state);
   if (state.flash && state.time < state.flashUntil) drawFlashText(width, height);
   if (state.phase === 'title') drawTitleScreen(width, height);
   if (state.phase === 'paused') drawPausedOverlay(width, height);
   if (state.phase === 'results') drawResultsScreen(width, height);
+}
+
+function drawWebglFallback(width, height) {
+  ctx.fillStyle = '#241a33';
+  ctx.fillRect(0, 0, width, height);
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#fff4e0';
+  ctx.font = 'bold 26px sans-serif';
+  ctx.fillText('Sunwing Courier needs WebGL for its 3D coast', width / 2, height / 2);
+  ctx.font = '18px sans-serif';
+  ctx.fillText('Enable hardware acceleration or try a current desktop browser', width / 2, height / 2 + 36);
 }
 
 function drawFlashText(width, height) {
