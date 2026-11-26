@@ -6,6 +6,10 @@ export function createInputState() {
     keys: new Set(),
     mouseSteer: { x: 0, y: 0, active: false },
     stick: { pitch: 0, roll: 0 }, // smoothed stick position
+    controls: {
+      throttle: 0, pitch: 0, roll: 0, yaw: 0,
+      brake: false, flaps: false, boost: false,
+    },
     flapsDown: false,
     throttleLever: 0,
     dropPressed: false,
@@ -31,6 +35,7 @@ export function attachInputListeners(input, canvas) {
     if (key === '4') input.missionChoice = 'canyon';
     if (key === '5') input.missionChoice = 'courier';
     if (key === '6') input.missionChoice = 'free';
+    if (key === '7') input.missionChoice = 'attack';
     if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(key)) event.preventDefault();
   });
   window.addEventListener('keyup', (event) => input.keys.delete(event.key.toLowerCase()));
@@ -66,15 +71,19 @@ export function readControls(input, dt) {
   }
   // Smooth the stick toward its target so taps and mouse jitter never
   // snatch the controls, while held inputs still reach full travel fast.
-  const blend = Math.min(1, dt * 11);
+  // The exponential blend is frame-rate independent, and the returned
+  // controls object is reused so sampling allocates nothing per frame.
+  const blend = 1 - Math.exp(-dt * 14);
   input.stick.pitch += (pitch - input.stick.pitch) * blend;
   input.stick.roll += (roll - input.stick.roll) * blend;
-  const controls = {
-    throttle: input.throttleLever,
-    pitch: input.stick.pitch, roll: input.stick.roll, yaw,
-    brake: keys.has(' '),
-    flaps: input.flapsDown,
-  };
+  const controls = input.controls;
+  controls.throttle = input.throttleLever;
+  controls.pitch = input.stick.pitch;
+  controls.roll = input.stick.roll;
+  controls.yaw = yaw;
+  controls.brake = keys.has(' ');
+  controls.flaps = input.flapsDown;
+  controls.boost = keys.has('shift');
   return controls;
 }
 

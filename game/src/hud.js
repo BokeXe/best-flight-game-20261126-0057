@@ -3,6 +3,7 @@
 // lights, mission banner, minimap and the off-screen target arrow.
 
 import { headingDegrees, STALL_SPEED } from './flight-model.js';
+import { projectPoint } from './camera.js';
 import { RUNWAY, CITY_CENTRE, HARBOR, LIGHTHOUSE, WORLD_SIZE, shorelineX, AVENUES, CROSS_STREETS, DISTRICTS } from './terrain.js';
 
 // Dusk instrument palette: deep plum panels, warm amber accents and bright
@@ -13,10 +14,14 @@ const AMBER = '#ffb347';
 const RED = '#ff5a4d';
 const GREEN = '#39d353';
 
+const READOUT_LABELS = ['ALT', 'SPD', 'HDG', 'V/S'];
+const RETICLE_POINT = { x: 0, y: 0, depth: 0, scale: 0 };
+
 export function drawHud(ctx, width, height, state) {
-  const a = state.aircraft;
+  const a = state.renderAircraft || state.aircraft;
   drawMissionBanner(ctx, width, state);
   drawCompassTape(ctx, width, a);
+  if (state.missionKind === 'attack') drawAttackReticle(ctx, width, height, state, a);
   // In cockpit view the panel carries the instruments; the HUD keeps only
   // the banner, compass, minimap and warnings so nothing overlaps.
   if (!state.cockpitView) {
@@ -26,7 +31,7 @@ export function drawHud(ctx, width, height, state) {
   }
   drawMinimap(ctx, width, height, state);
   drawTargetArrow(ctx, width, height, state);
-  drawWarningLights(ctx, width, height, a, state.time);
+  drawWarningLights(ctx, width, height, a, state);
 }
 
 function panel(ctx, x, y, w, h) {
@@ -59,15 +64,14 @@ function drawMissionBanner(ctx, width, state) {
 
 function drawPrimaryReadouts(ctx, width, height, a) {
   const y = height - 118;
-  const items = [
-    ['ALT', `${Math.round(a.y * 3.28)} ft`],
-    ['SPD', `${Math.round(a.speed * 1.94)} kt`],
-    ['HDG', `${String(Math.round(headingDegrees(a))).padStart(3, '0')}°`],
-    ['V/S', `${a.verticalSpeed >= 0 ? '+' : ''}${Math.round(a.verticalSpeed * 197)}`],
-  ];
   const w = 150, gap = 10;
-  const x0 = width / 2 - (items.length * w + (items.length - 1) * gap) / 2;
-  items.forEach(([label, value], i) => {
+  const x0 = width / 2 - (READOUT_LABELS.length * w + (READOUT_LABELS.length - 1) * gap) / 2;
+  for (let i = 0; i < READOUT_LABELS.length; i++) {
+    const label = READOUT_LABELS[i];
+    const value = i === 0 ? `${Math.round(a.y * 3.28)} ft`
+      : i === 1 ? `${Math.round(a.speed * 1.94)} kt`
+        : i === 2 ? `${String(Math.round(headingDegrees(a))).padStart(3, '0')}°`
+          : `${a.verticalSpeed >= 0 ? '+' : ''}${Math.round(a.verticalSpeed * 197)}`;
     const x = x0 + i * (w + gap);
     panel(ctx, x, y, w, 62);
     ctx.textAlign = 'center';
@@ -77,7 +81,7 @@ function drawPrimaryReadouts(ctx, width, height, a) {
       : label === 'SPD' && a.stallMargin < 9 && !a.onGround ? AMBER : INK;
     ctx.font = 'bold 27px sans-serif';
     ctx.fillText(value, x + w / 2, y + 50);
-  });
+  }
 }
 
 function drawCompassTape(ctx, width, a) {
@@ -132,27 +136,27 @@ export function drawArtificialHorizon(ctx, cx, cy, r, a) {
   ctx.fillText('ATTITUDE', cx, cy + r + 16);
 }
 
+function drawGaugeRow(ctx, x, y, w, label, frac, colour, text) {
+  ctx.textAlign = 'left';
+  ctx.fillStyle = DIM; ctx.font = 'bold 13px sans-serif';
+  ctx.fillText(label, x + 14, y);
+  ctx.textAlign = 'right';
+  ctx.fillStyle = INK; ctx.font = 'bold 15px sans-serif';
+  ctx.fillText(text, x + w - 14, y);
+  ctx.fillStyle = 'rgba(255,255,255,0.14)';
+  ctx.beginPath(); ctx.roundRect(x + 14, y + 8, w - 28, 12, 6); ctx.fill();
+  ctx.fillStyle = colour;
+  ctx.beginPath(); ctx.roundRect(x + 14, y + 8, Math.max(4, (w - 28) * Math.max(0, Math.min(1, frac))), 12, 6); ctx.fill();
+}
+
 function drawGauges(ctx, width, height, a) {
-  const x = width - 230, y = height - 210, w = 216, h = 196;
+  const x = width - 230, y = height - 252, w = 216, h = 238;
   panel(ctx, x, y, w, h);
-  const rows = [
-    ['FUEL', a.fuel / 100, a.fuel < 20 ? RED : GREEN, `${Math.round(a.fuel)}%`],
-    ['THROTTLE', a.throttle, AMBER, `${Math.round(a.throttle * 100)}%`],
-    ['AIRFRAME', 1 - a.damage / 100, a.damage > 55 ? RED : GREEN, `${Math.round(100 - a.damage)}%`],
-  ];
-  rows.forEach(([label, frac, colour, text], i) => {
-    const ry = y + 22 + i * 44;
-    ctx.textAlign = 'left';
-    ctx.fillStyle = DIM; ctx.font = 'bold 13px sans-serif';
-    ctx.fillText(label, x + 14, ry);
-    ctx.textAlign = 'right';
-    ctx.fillStyle = INK; ctx.font = 'bold 15px sans-serif';
-    ctx.fillText(text, x + w - 14, ry);
-    ctx.fillStyle = 'rgba(255,255,255,0.14)';
-    ctx.beginPath(); ctx.roundRect(x + 14, ry + 8, w - 28, 12, 6); ctx.fill();
-    ctx.fillStyle = colour;
-    ctx.beginPath(); ctx.roundRect(x + 14, ry + 8, Math.max(4, (w - 28) * Math.max(0, Math.min(1, frac))), 12, 6); ctx.fill();
-  });
+  drawGaugeRow(ctx, x, y + 22, w, 'FUEL', a.fuel / 100, a.fuel < 20 ? RED : GREEN, `${Math.round(a.fuel)}%`);
+  drawGaugeRow(ctx, x, y + 64, w, 'THROTTLE', a.throttle, AMBER, `${Math.round(a.throttle * 100)}%`);
+  drawGaugeRow(ctx, x, y + 106, w, 'BOOST', a.boostCharge || 0, a.boostActive ? RED : AMBER,
+    a.boostActive ? 'BURNING' : `${Math.round((a.boostCharge || 0) * 100)}%`);
+  drawGaugeRow(ctx, x, y + 148, w, 'AIRFRAME', 1 - a.damage / 100, a.damage > 55 ? RED : GREEN, `${Math.round(100 - a.damage)}%`);
   // Gear, flaps and live stall margin under the bars, short labels so the
   // three markers never collide at screenshot size.
   ctx.font = 'bold 12.5px sans-serif';
@@ -167,13 +171,79 @@ function drawGauges(ctx, width, height, a) {
   ctx.fillText(a.onGround ? `STALL ${Math.round(STALL_SPEED * 1.94)}kt` : `+${Math.max(0, Math.round(a.stallMargin * 1.94))}kt`, x + w - 12, y + h - 16);
 }
 
+function drawAttackReticle(ctx, width, height, state, a) {
+  const mission = state.mission;
+  const target = mission.target;
+  if (!target || !state.view) return;
+  // The reticle rides the aircraft nose, not the screen centre, so a
+  // LOCK means the projected sight and the target marker truly meet.
+  const cosPitch = Math.cos(a.pitch);
+  const nose = projectPoint(
+    state.view,
+    a.x + Math.sin(a.heading) * cosPitch * 600,
+    a.y + Math.sin(a.pitch) * 600,
+    a.z - Math.cos(a.heading) * cosPitch * 600,
+    RETICLE_POINT,
+  );
+  const cx = nose ? nose.x : width / 2;
+  const cy = nose ? nose.y : height / 2;
+  const colour = mission.inReticle ? GREEN : mission.lock > 0.35 ? AMBER : INK;
+  ctx.save();
+  ctx.strokeStyle = colour;
+  ctx.lineWidth = mission.inReticle ? 3.5 : 2.5;
+  ctx.beginPath(); ctx.arc(cx, cy, 34, 0, Math.PI * 2); ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(cx - 54, cy); ctx.lineTo(cx - 42, cy);
+  ctx.moveTo(cx + 42, cy); ctx.lineTo(cx + 54, cy);
+  ctx.moveTo(cx, cy - 54); ctx.lineTo(cx, cy - 42);
+  ctx.moveTo(cx, cy + 42); ctx.lineTo(cx, cy + 54);
+  ctx.stroke();
+  ctx.strokeStyle = mission.inReticle ? GREEN : AMBER;
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.arc(cx, cy, 46, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * mission.lock);
+  ctx.stroke();
+  ctx.fillStyle = colour;
+  ctx.beginPath(); ctx.arc(cx, cy, 3, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  const point = projectPoint(state.view, target.x, target.y + 10, target.z, RETICLE_POINT);
+  if (point && point.x > -80 && point.x < width + 80 && point.y > -80 && point.y < height + 80) {
+    ctx.save();
+    ctx.strokeStyle = colour;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(point.x, point.y - 18);
+    ctx.lineTo(point.x + 18, point.y);
+    ctx.lineTo(point.x, point.y + 18);
+    ctx.lineTo(point.x - 18, point.y);
+    ctx.closePath(); ctx.stroke();
+    ctx.fillStyle = colour;
+    ctx.font = 'bold 14px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${Math.round(mission.range)}m ${mission.inReticle ? 'LOCK' : 'TRACK'}`, point.x, point.y + 36);
+    ctx.restore();
+  }
+  panel(ctx, 14, 84, 218, 82);
+  ctx.textAlign = 'left';
+  ctx.fillStyle = AMBER; ctx.font = 'bold 15px sans-serif';
+  ctx.fillText('ATTACK RUN', 28, 108);
+  ctx.fillStyle = INK; ctx.font = 'bold 14px sans-serif';
+  ctx.fillText(`TARGETS ${mission.hits}/${mission.targets.length}`, 28, 130);
+  ctx.fillText(`SHOTS ${mission.shots}`, 28, 150);
+  ctx.textAlign = 'right';
+  ctx.fillStyle = a.boostActive ? RED : DIM;
+  ctx.fillText(a.boostActive ? 'BOOST ON' : 'SHIFT BOOST', 218, 130);
+  ctx.fillStyle = mission.cooldown > 0 ? AMBER : GREEN;
+  ctx.fillText(mission.cooldown > 0 ? 'PULSE…' : 'B READY', 218, 150);
+}
+
 function drawMinimap(ctx, width, height, state) {
   const size = 168, x = width - size - 14, y = 84;
   panel(ctx, x, y, size, size);
-  const toMap = (wx, wz) => ({
-    x: x + size / 2 + (wx / WORLD_SIZE) * size * 0.92,
-    y: y + size / 2 + (wz / WORLD_SIZE) * size * 0.92,
-  });
+  const mapScale = (size * 0.92) / WORLD_SIZE;
+  const mapCx = x + size / 2, mapCy = y + size / 2;
+  const mapX = (wx) => mapCx + wx * mapScale;
+  const mapY = (wz) => mapCy + wz * mapScale;
   ctx.save();
   ctx.beginPath(); ctx.roundRect(x + 3, y + 3, size - 6, size - 6, 8); ctx.clip();
   ctx.fillStyle = '#274a73'; ctx.fillRect(x, y, size, size);
@@ -181,53 +251,50 @@ function drawMinimap(ctx, width, height, state) {
   ctx.fillStyle = '#6d6248';
   ctx.beginPath();
   for (let z = -WORLD_SIZE / 2; z <= WORLD_SIZE / 2; z += 140) {
-    const p = toMap(shorelineX(z), z);
-    if (z === -WORLD_SIZE / 2) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+    if (z === -WORLD_SIZE / 2) ctx.moveTo(mapX(shorelineX(z)), mapY(z));
+    else ctx.lineTo(mapX(shorelineX(z)), mapY(z));
   }
   ctx.lineTo(x + size, y + size); ctx.lineTo(x + size, y);
   ctx.closePath(); ctx.fill();
   // City street grid, faint under the district markers.
   ctx.strokeStyle = 'rgba(255,244,224,0.35)'; ctx.lineWidth = 1;
   for (const avenueX of AVENUES) {
-    const a = toMap(avenueX, -1040), b = toMap(avenueX, 680);
-    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(mapX(avenueX), mapY(-1040)); ctx.lineTo(mapX(avenueX), mapY(680)); ctx.stroke();
   }
   for (const streetZ of CROSS_STREETS) {
-    const a = toMap(-320, streetZ), b = toMap(540, streetZ);
-    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(mapX(-320), mapY(streetZ)); ctx.lineTo(mapX(540), mapY(streetZ)); ctx.stroke();
   }
-  const rw = toMap(RUNWAY.x, (RUNWAY.z0 + RUNWAY.z1) / 2);
-  ctx.fillStyle = '#f5f7fa'; ctx.fillRect(rw.x - 2, rw.y - 8, 4, 16);
-  const city = toMap(CITY_CENTRE.x, CITY_CENTRE.z);
-  ctx.fillStyle = '#ffb347'; ctx.beginPath(); ctx.arc(city.x, city.y, 4, 0, Math.PI * 2); ctx.fill();
-  const harbor = toMap(HARBOR.x, HARBOR.z);
-  ctx.fillStyle = '#7fd4ff'; ctx.beginPath(); ctx.arc(harbor.x, harbor.y, 3, 0, Math.PI * 2); ctx.fill();
-  const lh = toMap(LIGHTHOUSE.x, LIGHTHOUSE.z);
-  ctx.fillStyle = '#ff5a4d'; ctx.beginPath(); ctx.arc(lh.x, lh.y, 3, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#f5f7fa'; ctx.fillRect(mapX(RUNWAY.x) - 2, mapY((RUNWAY.z0 + RUNWAY.z1) / 2) - 8, 4, 16);
+  ctx.fillStyle = '#ffb347'; ctx.beginPath(); ctx.arc(mapX(CITY_CENTRE.x), mapY(CITY_CENTRE.z), 4, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#7fd4ff'; ctx.beginPath(); ctx.arc(mapX(HARBOR.x), mapY(HARBOR.z), 3, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#ff5a4d'; ctx.beginPath(); ctx.arc(mapX(LIGHTHOUSE.x), mapY(LIGHTHOUSE.z), 3, 0, Math.PI * 2); ctx.fill();
   // District labels so the map reads as a city, not a coastline sketch.
   ctx.fillStyle = 'rgba(255,244,224,0.85)'; ctx.font = 'bold 7.5px sans-serif'; ctx.textAlign = 'center';
   for (const d of DISTRICTS) {
-    const p = toMap(d.x, d.z);
-    ctx.fillText(d.name, p.x, p.y - 6);
+    ctx.fillText(d.name, mapX(d.x), mapY(d.z) - 6);
   }
-  // Remaining mission markers: canyon gates and courier stops.
-  ctx.fillStyle = '#7fd4ff';
-  const markers = state.mission.kind === 'canyon' ? state.mission.rings.slice(state.mission.ringIndex + 1)
-    : state.mission.kind === 'courier' ? state.mission.stops.slice(state.mission.stopIndex + 1) : [];
-  for (const m of markers) {
-    const p = toMap(m.x, m.z);
-    ctx.beginPath(); ctx.arc(p.x, p.y, 2.2, 0, Math.PI * 2); ctx.fill();
+  // Remaining mission markers: canyon gates, courier stops, attack targets.
+  ctx.fillStyle = state.mission.kind === 'attack' ? RED : '#7fd4ff';
+  const markers = state.mission.kind === 'canyon' ? state.mission.rings
+    : state.mission.kind === 'courier' ? state.mission.stops
+      : state.mission.kind === 'attack' ? state.mission.targets : null;
+  const markerStart = state.mission.kind === 'canyon' ? state.mission.ringIndex + 1
+    : state.mission.kind === 'courier' ? state.mission.stopIndex + 1
+      : state.mission.kind === 'attack' ? state.mission.targetIndex + 1 : 0;
+  if (markers) {
+    for (let i = markerStart; i < markers.length; i++) {
+      ctx.beginPath(); ctx.arc(mapX(markers[i].x), mapY(markers[i].z), 2.2, 0, Math.PI * 2); ctx.fill();
+    }
   }
   const target = state.mission.target;
   if (target) {
-    const tp = toMap(target.x, target.z);
     ctx.strokeStyle = AMBER; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(tp.x, tp.y, 6 + Math.sin(state.time * 4) * 1.5, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(mapX(target.x), mapY(target.z), 6 + Math.sin(state.time * 4) * 1.5, 0, Math.PI * 2); ctx.stroke();
   }
-  const me = toMap(state.aircraft.x, state.aircraft.z);
+  const renderAircraft = state.renderAircraft || state.aircraft;
   ctx.save();
-  ctx.translate(me.x, me.y);
-  ctx.rotate(state.aircraft.heading);
+  ctx.translate(mapX(renderAircraft.x), mapY(renderAircraft.z));
+  ctx.rotate(renderAircraft.heading);
   ctx.fillStyle = '#ffffff';
   ctx.beginPath(); ctx.moveTo(0, -7); ctx.lineTo(5, 6); ctx.lineTo(0, 3); ctx.lineTo(-5, 6);
   ctx.closePath(); ctx.fill();
@@ -241,7 +308,7 @@ function drawMinimap(ctx, width, height, state) {
 function drawTargetArrow(ctx, width, height, state) {
   const target = state.mission.target;
   if (!target || !state.view) return;
-  const a = state.aircraft;
+  const a = state.renderAircraft || state.aircraft;
   const bearing = Math.atan2(target.x - a.x, -(target.z - a.z));
   let diff = bearing - a.heading;
   while (diff > Math.PI) diff -= Math.PI * 2;
@@ -263,23 +330,26 @@ function drawTargetArrow(ctx, width, height, state) {
   ctx.fillText(`${Math.round(dist)}m`, x, y + 30);
 }
 
-function drawWarningLights(ctx, width, height, a, time) {
-  const warnings = [];
-  if (a.stalled) warnings.push(['STALL — NOSE DOWN', RED]);
-  else if (a.stallMargin < 7 && !a.onGround) warnings.push(['STALL WARNING', AMBER]);
-  if (a.fuel < 20 && a.fuel > 0) warnings.push(['LOW FUEL', AMBER]);
-  if (a.fuel <= 0) warnings.push(['ENGINE OUT', RED]);
-  if (a.damage > 55) warnings.push(['AIRFRAME DAMAGE', RED]);
-  warnings.forEach(([label, colour], i) => {
-    const blink = Math.sin(time * 6 + i) > -0.2;
-    if (!blink && colour === RED) return;
-    const x = width / 2 - 90, y = height * 0.3 + i * 36;
-    ctx.fillStyle = 'rgba(60,8,8,0.8)';
-    ctx.beginPath(); ctx.roundRect(x, y, 180, 30, 8); ctx.fill();
-    ctx.strokeStyle = colour; ctx.lineWidth = 2; ctx.stroke();
-    ctx.fillStyle = colour; ctx.font = 'bold 17px sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText(label, width / 2, y + 21);
-  });
+function drawWarningLights(ctx, width, height, a, state) {
+  let i = 0;
+  const drawWarning = (label, colour) => {
+    const blink = Math.sin(state.time * 6 + i) > -0.2;
+    if (blink || colour !== RED) {
+      const x = width / 2 - 90, y = height * 0.3 + i * 36;
+      ctx.fillStyle = 'rgba(60,8,8,0.8)';
+      ctx.beginPath(); ctx.roundRect(x, y, 180, 30, 8); ctx.fill();
+      ctx.strokeStyle = colour; ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = colour; ctx.font = 'bold 17px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText(label, width / 2, y + 21);
+    }
+    i++;
+  };
+  if (a.stalled) drawWarning('STALL — NOSE DOWN', RED);
+  else if (a.stallMargin < 7 && !a.onGround) drawWarning('STALL WARNING', AMBER);
+  if (state.mission.lowWarning) drawWarning('TOO LOW — PULL UP', RED);
+  if (a.fuel < 20 && a.fuel > 0) drawWarning('LOW FUEL', AMBER);
+  if (a.fuel <= 0) drawWarning('ENGINE OUT', RED);
+  if (a.damage > 55) drawWarning('AIRFRAME DAMAGE', RED);
 }
 
 export function formatClock(seconds) {

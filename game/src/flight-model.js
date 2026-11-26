@@ -4,6 +4,7 @@
 
 export const STALL_SPEED = 26; // m/s indicated
 export const MAX_SPEED = 92;
+export const BOOST_MAX_SPEED = 118;
 export const FUEL_CAPACITY = 100;
 
 export function createAircraftState(spawn) {
@@ -15,6 +16,9 @@ export function createAircraftState(spawn) {
     verticalSpeed: 0,
     throttle: spawn.throttle,
     fuel: FUEL_CAPACITY,
+    boostCharge: 1, // 0 spent .. 1 full afterburner
+    boostActive: false,
+    boostBlend: 0, // smoothed 0..1 for thrust, sound and camera kick
     damage: 0, // 0 pristine .. 100 wrecked
     stalled: false,
     stallMargin: 99,
@@ -36,7 +40,15 @@ export function stepFlightModel(state, controls, dt, groundHeight) {
   // Burn rises steeply with power, so cruising gently stretches the sortie.
   const lever = state.fuel > 0 ? controls.throttle : 0;
   state.throttle += (lever - state.throttle) * Math.min(1, dt * 2.6);
-  state.fuel = Math.max(0, state.fuel - (0.04 + Math.pow(state.throttle, 1.6) * 0.62) * dt);
+  // Afterburner: a short, loud shove for dives and escapes. Charge drains
+  // in about three seconds and refills slowly, so boost is a decision.
+  state.boostActive = controls.boost === true && !state.onGround
+    && state.fuel > 0 && state.boostCharge > 0.02;
+  if (state.boostActive) state.boostCharge = Math.max(0, state.boostCharge - dt * 0.3);
+  else state.boostCharge = Math.min(1, state.boostCharge + dt * 0.1);
+  state.boostBlend += ((state.boostActive ? 1 : 0) - state.boostBlend) * Math.min(1, dt * 7);
+  state.fuel = Math.max(0, state.fuel
+    - (0.04 + Math.pow(state.throttle, 1.6) * 0.62 + (state.boostActive ? 0.5 : 0)) * dt);
   state.flapsDown = controls.flaps === true && state.speed < 58;
 
   // Pitch and roll track the stick with a short lag, then settle: no twitch,
@@ -55,13 +67,16 @@ export function stepFlightModel(state, controls, dt, groundHeight) {
 
   // Energy: thrust accelerates, drag and climbing bleed speed. A bent
   // airframe makes less thrust, so damage is a reason to head home.
-  const thrust = state.throttle * 26 * (state.damage > 55 ? 0.82 : 1);
+  const thrust = (state.throttle * 26 + state.boostBlend * 22) * (state.damage > 55 ? 0.82 : 1);
   const induced = Math.abs(Math.tan(state.roll)) * state.speed * 0.05;
   const drag = 0.0038 * state.speed * state.speed + induced
     + (controls.brake ? 9 : 0) + (state.flapsDown ? 2.6 : 0);
   const gravityAlongPath = Math.sin(state.pitch) * 9.81;
   state.speed += (thrust - drag - gravityAlongPath) * dt;
-  state.speed = clamp(state.speed, 0, MAX_SPEED);
+  // The boost cap decays softly so cutting the burner never snaps speed.
+  const speedCap = MAX_SPEED + state.boostBlend * (BOOST_MAX_SPEED - MAX_SPEED);
+  if (state.speed > speedCap) state.speed = Math.max(speedCap, state.speed - dt * 12);
+  state.speed = clamp(state.speed, 0, BOOST_MAX_SPEED);
 
   // The stall: banked flight stalls faster (load factor), flaps buy margin.
   // Below the effective stall speed the nose drops and lift fades.

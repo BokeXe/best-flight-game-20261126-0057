@@ -10,6 +10,7 @@ export const MISSION_LANDING = 'landing';
 export const MISSION_CANYON = 'canyon';
 export const MISSION_COURIER = 'courier';
 export const MISSION_FREE = 'free';
+export const MISSION_ATTACK = 'attack';
 
 export function createMission(kind, heights) {
   if (kind === MISSION_CARGO) return createCargoMission(heights);
@@ -17,6 +18,7 @@ export function createMission(kind, heights) {
   if (kind === MISSION_CANYON) return createCanyonMission(heights);
   if (kind === MISSION_COURIER) return createCourierMission(heights);
   if (kind === MISSION_FREE) return createFreeMission();
+  if (kind === MISSION_ATTACK) return createAttackMission(heights);
   return createRingMission(heights);
 }
 
@@ -139,6 +141,46 @@ function createFreeMission() {
   };
 }
 
+// Attack run: six training markers around the harbour range. The pilot
+// dives on each marker, centres it in the reticle and fires a training
+// pulse with B; fast, steep, well-aimed passes pay best. Flying recklessly
+// low strains the airframe, so the run rewards commitment with control.
+function createAttackMission(heights) {
+  const targets = [
+    { name: 'QUAY MARKER', x: -360, z: 80 },
+    { name: 'CRANE MARKER', x: -210, z: 230 },
+    { name: 'BAY MARKER', x: -455, z: 285 },
+    { name: 'PIER MARKER', x: -170, z: 20 },
+    { name: 'SOUTH MARKER', x: -320, z: 430 },
+    { name: 'WEST MARKER', x: -560, z: 90 },
+  ].map((t) => ({ ...t, radius: 95, y: Math.max(0, terrainHeightAt(heights, t.x, t.z)) + 8 }));
+  return {
+    kind: MISSION_ATTACK,
+    title: 'ATTACK RUN',
+    rings: [],
+    targets,
+    targetIndex: 0,
+    target: targets[0],
+    hits: 0,
+    shots: 0,
+    lock: 0,
+    alignment: 0,
+    range: 0,
+    inReticle: false,
+    attackWindow: false,
+    cooldown: 0,
+    pulseUntil: -1,
+    pulseX: 0, pulseY: 0, pulseZ: 0,
+    hitUntil: -1,
+    hitX: 0, hitY: 0, hitZ: 0,
+    lowWarning: false,
+    bannerTitle: 'MISSION: ATTACK RUN · HARD',
+    bannerText: 'Dive on the harbour markers — centre the reticle, press B to fire',
+    finished: false,
+    resultLines: [],
+  };
+}
+
 export function updateMission(mission, aircraft, state, dt, heights) {
   if (mission.finished) return;
   if (mission.kind === MISSION_RINGS) updateRingMission(mission, aircraft, state);
@@ -146,7 +188,85 @@ export function updateMission(mission, aircraft, state, dt, heights) {
   else if (mission.kind === MISSION_CANYON) updateCanyonMission(mission, aircraft, state, heights);
   else if (mission.kind === MISSION_COURIER) updateCourierMission(mission, aircraft, state, dt, heights);
   else if (mission.kind === MISSION_FREE) updateFreeMission(mission, aircraft, state);
+  else if (mission.kind === MISSION_ATTACK) updateAttackMission(mission, aircraft, state, dt, heights);
   else updateLandingMission(mission, aircraft, state);
+}
+
+function updateAttackMission(mission, aircraft, state, dt, heights) {
+  const target = mission.targets[mission.targetIndex];
+  if (!target) return;
+  mission.cooldown = Math.max(0, mission.cooldown - dt);
+  const ground = Math.max(0, terrainHeightAt(heights, aircraft.x, aircraft.z));
+  const agl = aircraft.y - ground;
+  // Reckless-low feedback: skimming the range at speed strains the
+  // airframe until the pilot climbs or slows down.
+  mission.lowWarning = !aircraft.onGround && agl < 10 && aircraft.speed > 48;
+  if (mission.lowWarning) {
+    aircraft.damage = Math.min(100, aircraft.damage + dt * 7);
+    if (aircraft.damage >= 100) aircraft.crashed = true;
+    state.flash = 'TOO LOW — AIRFRAME STRAIN';
+    state.flashUntil = state.time + 0.25;
+  }
+  const dx = target.x - aircraft.x;
+  const dy = target.y + 8 - aircraft.y;
+  const dz = target.z - aircraft.z;
+  const dist = Math.hypot(dx, dy, dz);
+  const cosPitch = Math.cos(aircraft.pitch);
+  const fx = Math.sin(aircraft.heading) * cosPitch;
+  const fy = Math.sin(aircraft.pitch);
+  const fz = -Math.cos(aircraft.heading) * cosPitch;
+  const alignment = dist > 0 ? (fx * dx + fy * dy + fz * dz) / dist : 0;
+  const rangeFactor = dist < 1000 ? 1 : Math.max(0, 1 - (dist - 1000) / 700);
+  mission.range = dist;
+  mission.alignment = alignment;
+  mission.lock = Math.max(0, Math.min(1, (alignment - 0.82) / 0.16)) * rangeFactor * (dist < 55 ? 0.35 : 1);
+  mission.inReticle = alignment > 0.962 && dist >= 55 && dist <= 980;
+  mission.attackWindow = agl >= 14 && agl <= 190 && aircraft.speed >= 34;
+  const cue = mission.inReticle
+    ? (mission.attackWindow ? 'LOCK — press B' : agl > 190 ? 'LOCK — dive into the window' : agl < 14 ? 'LOCK — pull up' : 'LOCK — build speed')
+    : mission.lock > 0.35 ? 'tracking — centre the reticle' : 'line up the dive';
+  mission.bannerText = `${target.name} ${mission.targetIndex + 1} of ${mission.targets.length} · ${Math.round(dist)} m · ${cue} · hits ${mission.hits}/${mission.shots}`;
+  if (!state.fireRequested) return;
+  state.fireRequested = false;
+  if (mission.cooldown > 0) return;
+  mission.shots++;
+  mission.cooldown = 0.38;
+  mission.pulseUntil = state.time + 0.16;
+  mission.pulseX = target.x;
+  mission.pulseY = target.y + 8;
+  mission.pulseZ = target.z;
+  if (mission.inReticle && mission.attackWindow) {
+    const points = Math.round(260 + mission.lock * 140
+      + Math.max(0, aircraft.speed - 40) * 2
+      + Math.max(0, -aircraft.verticalSpeed) * 4);
+    state.score += points;
+    state.cash += Math.round(points / 2);
+    mission.hits++;
+    mission.hitUntil = state.time + 0.7;
+    mission.hitX = target.x;
+    mission.hitY = target.y + 8;
+    mission.hitZ = target.z;
+    state.flash = `TARGET HIT +${points}`;
+    state.flashUntil = state.time + 1.1;
+    mission.targetIndex++;
+    if (mission.targetIndex >= mission.targets.length) {
+      const accuracy = mission.shots > 0 ? mission.hits / mission.shots : 0;
+      const bonus = Math.round(accuracy * 300 + Math.max(0, 300 - state.missionTime));
+      state.score += bonus;
+      state.cash += Math.round(bonus / 2);
+      finishMission(mission, state, [
+        `All ${mission.targets.length} range markers hit in ${Math.round(state.missionTime)} seconds`,
+        `Accuracy ${Math.round(accuracy * 100)}% · bonus +${bonus} · airframe ${Math.round(100 - aircraft.damage)}%`,
+      ]);
+    } else {
+      mission.target = mission.targets[mission.targetIndex];
+    }
+  } else {
+    state.flash = !mission.inReticle ? 'PULSE MISSED'
+      : agl > 190 ? 'TOO HIGH — DIVE'
+        : agl < 14 ? 'TOO LOW — PULL UP' : 'TOO SLOW — BOOST';
+    state.flashUntil = state.time + 0.9;
+  }
 }
 
 function updateCanyonMission(mission, aircraft, state, heights) {
@@ -357,6 +477,11 @@ export function missionSpawn(kind) {
   if (kind === MISSION_CANYON) {
     // South of downtown, lined up on the avenue for the first gate.
     return { x: 55, y: 130, z: 720, heading: 0, speed: 55, throttle: 0.55, onGround: false };
+  }
+  if (kind === MISSION_ATTACK) {
+    // Southeast of the harbour range, already diving toward the first
+    // marker with speed on and the burner ready.
+    return { x: 240, y: 285, z: 760, heading: -0.78, speed: 62, throttle: 0.68, onGround: false };
   }
   if (kind === MISSION_FREE) {
     // Airborne over the beachfront, the whole city spread ahead.

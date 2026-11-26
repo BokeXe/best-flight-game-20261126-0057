@@ -2,9 +2,9 @@
 // perspective projection, a look basis from the chase camera, and model
 // transforms for the aircraft, rings and cargo crate.
 
-export function perspectiveMatrix(fovRadians, aspect, near, far) {
+export function perspectiveMatrix(fovRadians, aspect, near, far, out = new Float32Array(16)) {
   const f = 1 / Math.tan(fovRadians / 2);
-  const out = new Float32Array(16);
+  out.fill(0);
   out[0] = f / aspect;
   out[5] = f;
   out[10] = (far + near) / (near - far);
@@ -15,9 +15,9 @@ export function perspectiveMatrix(fovRadians, aspect, near, far) {
 
 // View matrix from the camera basis buildViewMatrix already computes:
 // rows are right, up and -forward, translated by the camera position.
-export function viewMatrixFromBasis(view) {
+export function viewMatrixFromBasis(view, out = new Float32Array(16)) {
   const { cam, right, up, fwd } = view;
-  const out = new Float32Array(16);
+  out.fill(0);
   out[0] = right.x; out[4] = right.y; out[8] = right.z;
   out[1] = up.x; out[5] = up.y; out[9] = up.z;
   out[2] = -fwd.x; out[6] = -fwd.y; out[10] = -fwd.z;
@@ -28,70 +28,65 @@ export function viewMatrixFromBasis(view) {
   return out;
 }
 
-export function multiplyMatrices(a, b) {
-  const out = new Float32Array(16);
+// Callers pass a scratch matrix for per-frame work; out must not alias a or b.
+export function multiplyMatrices(a, b, out = new Float32Array(16)) {
   for (let col = 0; col < 4; col++) {
-    for (let row = 0; row < 4; row++) {
-      let sum = 0;
-      for (let k = 0; k < 4; k++) sum += a[k * 4 + row] * b[col * 4 + k];
-      out[col * 4 + row] = sum;
-    }
+    const b0 = b[col * 4], b1 = b[col * 4 + 1], b2 = b[col * 4 + 2], b3 = b[col * 4 + 3];
+    out[col * 4] = a[0] * b0 + a[4] * b1 + a[8] * b2 + a[12] * b3;
+    out[col * 4 + 1] = a[1] * b0 + a[5] * b1 + a[9] * b2 + a[13] * b3;
+    out[col * 4 + 2] = a[2] * b0 + a[6] * b1 + a[10] * b2 + a[14] * b3;
+    out[col * 4 + 3] = a[3] * b0 + a[7] * b1 + a[11] * b2 + a[15] * b3;
   }
   return out;
 }
 
-function rotationY(angle) {
+function rotationY(angle, out = new Float32Array(16)) {
   const c = Math.cos(angle), s = Math.sin(angle);
-  const out = identityMatrix();
+  identityMatrix(out);
   out[0] = c; out[8] = s; out[2] = -s; out[10] = c;
   return out;
 }
 
-function rotationX(angle) {
-  const c = Math.cos(angle), s = Math.sin(angle);
-  const out = identityMatrix();
-  out[5] = c; out[9] = -s; out[6] = s; out[10] = c;
-  return out;
-}
-
-function rotationZ(angle) {
-  const c = Math.cos(angle), s = Math.sin(angle);
-  const out = identityMatrix();
-  out[0] = c; out[4] = -s; out[1] = s; out[5] = c;
-  return out;
-}
-
-export function identityMatrix() {
-  const out = new Float32Array(16);
+export function identityMatrix(out = new Float32Array(16)) {
+  out.fill(0);
   out[0] = out[5] = out[10] = out[15] = 1;
   return out;
 }
 
 // Model matrix for a body whose local forward is -z, matching the flight
 // model's heading (0 = north, toward -z), pitch (nose up positive) and
-// roll (right wing down positive).
-export function bodyMatrix(x, y, z, heading, pitch, roll, scale = 1) {
-  let m = rotationY(heading);
-  m = multiplyMatrices(m, rotationX(pitch));
-  m = multiplyMatrices(m, rotationZ(roll));
-  const out = identityMatrix();
-  for (let i = 0; i < 16; i++) out[i] = m[i] * scale;
-  out[15] = 1;
+// roll (right wing down positive). The Y*X*Z rotation is written directly
+// into the caller's matrix so the render loop allocates nothing here.
+export function bodyMatrix(x, y, z, heading, pitch, roll, scale = 1, out = new Float32Array(16)) {
+  const cy = Math.cos(heading), sy = Math.sin(heading);
+  const cx = Math.cos(pitch), sx = Math.sin(pitch);
+  const cz = Math.cos(roll), sz = Math.sin(roll);
+  out.fill(0);
+  out[0] = (cy * cz + sy * sx * sz) * scale;
+  out[1] = cx * sz * scale;
+  out[2] = (-sy * cz + cy * sx * sz) * scale;
+  out[4] = (-cy * sz + sy * sx * cz) * scale;
+  out[5] = cx * cz * scale;
+  out[6] = (sy * sz + cy * sx * cz) * scale;
+  out[8] = sy * cx * scale;
+  out[9] = -sx * scale;
+  out[10] = cy * cx * scale;
   out[12] = x; out[13] = y; out[14] = z;
+  out[15] = 1;
   return out;
 }
 
 // Ring orientation: local +z faces along the course direction so the torus
 // hole looks down the flight path.
-export function facingMatrix(x, y, z, dirX, dirZ) {
+export function facingMatrix(x, y, z, dirX, dirZ, out = new Float32Array(16)) {
   const heading = Math.atan2(dirX, dirZ);
-  const m = rotationY(heading);
-  m[12] = x; m[13] = y; m[14] = z;
-  return m;
+  rotationY(heading, out);
+  out[12] = x; out[13] = y; out[14] = z;
+  return out;
 }
 
-export function translateMatrix(x, y, z) {
-  const out = identityMatrix();
+export function translateMatrix(x, y, z, out = new Float32Array(16)) {
+  identityMatrix(out);
   out[12] = x; out[13] = y; out[14] = z;
   return out;
 }

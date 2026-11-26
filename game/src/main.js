@@ -8,7 +8,7 @@ import { createChaseCamera, updateChaseCamera, buildViewMatrix } from './camera.
 import { createWebglRenderer } from './webgl-renderer.js';
 import { drawCockpitPanel } from './aircraft.js';
 import { drawHud, drawCockpitInstruments, formatClock } from './hud.js';
-import { createMission, updateMission, missionSpawn, isOnRunway, MISSION_CARGO } from './missions.js';
+import { createMission, updateMission, missionSpawn, isOnRunway, MISSION_CARGO, MISSION_ATTACK } from './missions.js';
 import { createInputState, attachInputListeners, readControls, consumeOneShotInputs } from './input.js';
 import { createAudioEngine } from './audio.js';
 import { shotSceneFromUrl, applyShotScene, autopilotControls } from './shots.js';
@@ -16,6 +16,16 @@ import { shotSceneFromUrl, applyShotScene, autopilotControls } from './shots.js'
 const canvas = document.getElementById('game-canvas');
 const ctx = canvas.getContext('2d');
 const glCanvas = document.getElementById('gl-canvas');
+
+// The flight model runs on a fixed 120 Hz clock whatever the display
+// rate; rendering interpolates between the last two simulation states so
+// motion stays smooth without the model ever seeing a ragged dt.
+const SIM_STEP = 1 / 120;
+const MAX_SIM_STEPS = 14;
+const INTERPOLATED_FIELDS = [
+  'x', 'y', 'z', 'pitch', 'roll', 'speed', 'verticalSpeed',
+  'throttle', 'fuel', 'damage', 'boostCharge', 'boostBlend', 'stallMargin',
+];
 
 const state = createGameState(7);
 const worldRenderer = createWebglRenderer(glCanvas, state);
@@ -26,6 +36,7 @@ canvas.addEventListener('click', () => audio.start());
 
 function createGameState(seed) {
   const heights = buildCoastalHeightfield(seed);
+  const aircraft = createAircraftState(missionSpawn('rings'));
   return {
     seed,
     heights,
@@ -33,7 +44,10 @@ function createGameState(seed) {
     clouds: buildCloudField(seed),
     traffic: buildTraffic(seed),
     cash: 0,
-    aircraft: createAircraftState(missionSpawn('rings')),
+    aircraft,
+    prevAircraft: { ...aircraft },
+    renderAircraft: { ...aircraft },
+    accumulator: 0,
     camera: createChaseCamera(),
     missionKind: 'rings',
     mission: createMission('rings', heights),
@@ -43,11 +57,14 @@ function createGameState(seed) {
     time: 0,
     cockpitView: false,
     dropRequested: false,
+    fireRequested: false,
     flash: '',
     flashUntil: 0,
     shotMode: false,
     view: null,
     lastRingIndex: 0,
+    lastAttackHits: 0,
+    lastAttackShots: 0,
   };
 }
 
@@ -55,18 +72,25 @@ function startMission(kind) {
   state.missionKind = kind;
   state.mission = createMission(kind, state.heights);
   state.aircraft = createAircraftState(missionSpawn(kind));
+  Object.assign(state.prevAircraft, state.aircraft);
+  Object.assign(state.renderAircraft, state.aircraft);
+  state.accumulator = 0;
   state.camera = createChaseCamera();
   state.score = 0;
   state.cash = 0;
   state.missionTime = 0;
   state.phase = 'flying';
   state.flash = '';
+  state.dropRequested = false;
+  state.fireRequested = false;
   state.lastRingIndex = 0;
+  state.lastAttackHits = 0;
+  state.lastAttackShots = 0;
   input.throttleLever = state.aircraft.throttle;
   audio.start();
 }
 
-function stepGame(dt) {
+function stepGame(frameDt) {
   const shots = consumeOneShotInputs(input);
   if (state.phase === 'title') {
     if (shots.mission) startMission(shots.mission);
@@ -77,9 +101,27 @@ function stepGame(dt) {
   if (shots.restart) { startMission(state.missionKind); return; }
   if (state.phase !== 'flying') return;
   if (shots.camera) state.cockpitView = !state.cockpitView;
-  state.dropRequested = shots.drop;
+  if (shots.drop) {
+    state.dropRequested = true;
+    state.fireRequested = true;
+  }
 
-  const controls = state.shotMode ? autopilotControls(state) : readControls(input, dt);
+  const controls = state.shotMode ? autopilotControls(state) : readControls(input, frameDt);
+  state.accumulator = Math.min(0.12, state.accumulator + Math.min(frameDt, 0.1));
+  let steps = 0;
+  while (state.accumulator >= SIM_STEP && steps < MAX_SIM_STEPS) {
+    Object.assign(state.prevAircraft, state.aircraft);
+    stepSimulation(SIM_STEP, controls);
+    state.accumulator -= SIM_STEP;
+    steps++;
+    if (state.phase !== 'flying') break;
+  }
+  if (steps >= MAX_SIM_STEPS) state.accumulator = 0; // drop backlog, never spiral
+  if (steps > 0) state.dropRequested = false;
+  updateRenderAircraft(state.accumulator / SIM_STEP);
+}
+
+function stepSimulation(dt, controls) {
   const ground = Math.max(0, terrainHeightAt(state.heights, state.aircraft.x, state.aircraft.z));
   const wasOnGround = state.aircraft.onGround;
   stepFlightModel(state.aircraft, controls, dt, ground);
@@ -92,30 +134,54 @@ function stepGame(dt) {
   }
   refuelIfParked(state.aircraft, isOnRunway(state.aircraft));
   updateMission(state.mission, state.aircraft, state, dt, state.heights);
-  if (state.mission.ringIndex !== state.lastRingIndex) {
+  if (state.mission.ringIndex !== undefined && state.mission.ringIndex !== state.lastRingIndex) {
     state.lastRingIndex = state.mission.ringIndex;
     audio.chime('ring');
   }
   if (state.dropRequested && (state.missionKind === MISSION_CARGO || state.missionKind === 'courier')) audio.chime('drop');
-  if (state.missionKind === 'canyon' && state.mission.ringIndex !== state.lastRingIndex) {
-    state.lastRingIndex = state.mission.ringIndex;
-    audio.chime('ring');
+  if (state.missionKind === MISSION_ATTACK) {
+    if (state.mission.shots !== state.lastAttackShots) {
+      state.lastAttackShots = state.mission.shots;
+      audio.chime('fire');
+    }
+    if (state.mission.hits !== state.lastAttackHits) {
+      state.lastAttackHits = state.mission.hits;
+      audio.chime('hit');
+    }
   }
   state.missionTime += dt;
   state.time += dt;
-  audio.update(state.aircraft.throttle, state.aircraft.speed, state.aircraft.stalled);
+  audio.update(state.aircraft.throttle, state.aircraft.speed, state.aircraft.stalled, state.aircraft.boostBlend);
 }
 
-function renderGame() {
+function updateRenderAircraft(alpha) {
+  const prev = state.prevAircraft, current = state.aircraft, render = state.renderAircraft;
+  if (alpha >= 1 || state.phase !== 'flying') {
+    Object.assign(render, current);
+    return;
+  }
+  Object.assign(render, current);
+  for (const field of INTERPOLATED_FIELDS) {
+    render[field] = prev[field] + (current[field] - prev[field]) * alpha;
+  }
+  let headingDiff = (current.heading - prev.heading) % (Math.PI * 2);
+  if (headingDiff > Math.PI) headingDiff -= Math.PI * 2;
+  if (headingDiff < -Math.PI) headingDiff += Math.PI * 2;
+  render.heading = prev.heading + headingDiff * alpha;
+}
+
+function renderGame(frameDt = 1 / 60) {
   const width = canvas.width, height = canvas.height;
-  updateChaseCamera(state.camera, state.aircraft, 1 / 60, state.cockpitView);
-  const view = buildViewMatrix(state.camera, width, height);
+  const renderAircraft = state.renderAircraft;
+  updateChaseCamera(state.camera, renderAircraft, Math.min(frameDt, 0.05), state.cockpitView);
+  const fov = 1.02 + (renderAircraft.boostBlend || 0) * 0.17;
+  const view = buildViewMatrix(state.camera, width, height, state.view, fov);
   state.view = view;
   ctx.clearRect(0, 0, width, height);
   if (worldRenderer) worldRenderer.render(state, view);
   else drawWebglFallback(width, height);
   if (state.cockpitView) {
-    drawCockpitPanel(ctx, width, height, state.aircraft, drawCockpitInstruments);
+    drawCockpitPanel(ctx, width, height, renderAircraft, drawCockpitInstruments);
   }
   drawHud(ctx, width, height, state);
   if (state.flash && state.time < state.flashUntil) drawFlashText(width, height);
@@ -166,17 +232,18 @@ function drawTitleScreen(width, height) {
     '4  AVENUE CANYON · HARD — low gates between the downtown towers',
     '5  COURIER CHAIN · MEDIUM — four district drops against the clock',
     '6  FREE FLIGHT — roam the whole living city, no finish line',
+    '7  ATTACK RUN · HARD — dive on harbour markers, fire with B',
     '',
     'W/S or wheel throttle · arrows or mouse steer · A/D rudder',
-    'Space brake · F flaps · B drop cargo · C camera · P pause · R restart',
+    'Shift boost · Space brake · F flaps · B drop/fire · C camera · P pause · R restart',
     'Hard turns bleed speed and raise the stall — fly smooth, watch fuel',
     'Park on the runway to refuel and repair a bent airframe',
   ];
-  ctx.font = '19px sans-serif';
-  lines.forEach((line, i) => ctx.fillText(line, width / 2, height * 0.33 + i * 31));
+  ctx.font = '18px sans-serif';
+  lines.forEach((line, i) => ctx.fillText(line, width / 2, height * 0.31 + i * 29));
   ctx.fillStyle = '#ffb347';
   ctx.font = 'bold 24px sans-serif';
-  ctx.fillText('Press 1–6 to fly', width / 2, height * 0.33 + lines.length * 31 + 26);
+  ctx.fillText('Press 1–7 to fly', width / 2, height * 0.31 + lines.length * 29 + 24);
 }
 
 function drawPausedOverlay(width, height) {
@@ -204,7 +271,7 @@ function drawResultsScreen(width, height) {
   state.mission.resultLines.forEach((line, i) => ctx.fillText(line, width / 2, height * 0.3 + 92 + i * 32));
   ctx.fillStyle = '#ffd34d';
   ctx.font = 'bold 22px sans-serif';
-  ctx.fillText('R fly it again · 1–6 choose another mission', width / 2, height * 0.3 + 92 + state.mission.resultLines.length * 32 + 30);
+  ctx.fillText('R fly it again · 1–7 choose another mission', width / 2, height * 0.3 + 92 + state.mission.resultLines.length * 32 + 30);
 }
 
 // Boot: shot scenes run a fixed number of steps, then hold the frame.
@@ -215,19 +282,31 @@ if (scene) {
   state.buildings = buildCityBuildings(scene.seed);
   state.clouds = buildCloudField(scene.seed);
   state.traffic = buildTraffic(scene.seed);
-  state.mission = createMission(scene.shot === 'cover' ? 'canyon' : scene.shot === 'landing' ? 'landing' : 'cargo', state.heights);
+  const shotMission = scene.shot === 'cover' ? 'canyon'
+    : scene.shot === 'landing' ? 'landing'
+      : scene.shot === 'attack' ? MISSION_ATTACK : 'cargo';
+  state.missionKind = shotMission;
+  state.mission = createMission(shotMission, state.heights);
   applyShotScene(state, scene);
+  Object.assign(state.prevAircraft, state.aircraft);
+  Object.assign(state.renderAircraft, state.aircraft);
   for (let i = 0; i < 90; i++) stepGame(1 / 60);
-  state.flash = scene.shot === 'cover' ? 'STREET BONUS +200' : '';
+  if (scene.shot === 'attack' && state.mission.target) {
+    state.mission.pulseUntil = state.time + 1;
+    state.mission.pulseX = state.mission.target.x;
+    state.mission.pulseY = state.mission.target.y + 8;
+    state.mission.pulseZ = state.mission.target.z;
+  }
+  state.flash = '';
   state.flashUntil = state.time + 10;
-  renderGame();
+  renderGame(1 / 60);
 } else {
   let last = performance.now();
   const loop = (now) => {
-    const dt = Math.min(0.05, (now - last) / 1000);
+    const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
     stepGame(dt);
-    renderGame();
+    renderGame(dt);
     requestAnimationFrame(loop);
   };
   requestAnimationFrame(loop);

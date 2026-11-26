@@ -15,7 +15,7 @@ import {
 } from './gl-world.js';
 import {
   buildAircraftGeometry, buildElevonGeometry, buildExhaustGeometry,
-  buildNavLightPoints, buildRingGeometry, buildCrateGeometry, buildBeaconGeometry,
+  buildNavLightPoints, buildRingGeometry, buildCrateGeometry, buildBeaconGeometry, buildTargetGeometry,
 } from './gl-aircraft.js';
 import {
   perspectiveMatrix, viewMatrixFromBasis, multiplyMatrices,
@@ -32,7 +32,7 @@ function normalize(v) {
 }
 
 export function createWebglRenderer(canvas, state) {
-  const gl = canvas.getContext('webgl', { antialias: true, preserveDrawingBuffer: true })
+  const gl = canvas.getContext('webgl', { antialias: true, preserveDrawingBuffer: false })
     || canvas.getContext('experimental-webgl');
   if (!gl) return null;
   gl.getExtension('OES_element_index_uint');
@@ -63,8 +63,33 @@ class WebglRenderer {
       const key = car.color.join(',');
       if (!this.carMeshes.has(key)) this.carMeshes.set(key, uploadGeometry(gl, buildCarGeometry(car.color)));
     }
-    this.trailLeft = [];
-    this.trailRight = [];
+    // Scratch matrices and poses reused every frame: the render loop
+    // allocates no matrices, poses or point arrays after construction.
+    this.proj = new Float32Array(16);
+    this.viewMat = new Float32Array(16);
+    this.viewProj = new Float32Array(16);
+    this.mvpScratch = new Float32Array(16);
+    this.pointsMvpScratch = new Float32Array(16);
+    this.modelScratch = new Float32Array(16);
+    this.modelScratch2 = new Float32Array(16);
+    this.modelScratch3 = new Float32Array(16);
+    this.identity = identityMatrix();
+    this.camPos = [0, 0, 0];
+    this.carPose = { x: 0, y: 0, z: 0, heading: 0 };
+    this.trailLeft = { data: new Float32Array(48 * 3), start: 0, count: 0 };
+    this.trailRight = { data: new Float32Array(48 * 3), start: 0, count: 0 };
+    this.trailPositions = new Float32Array(96 * 3);
+    this.trailColors = new Float32Array(96 * 3);
+    this.trailSizes = new Float32Array(96);
+    this.trailBuffer = uploadPoints(gl, {
+      positions: this.trailPositions, colors: this.trailColors, sizes: this.trailSizes,
+    });
+    this.attackPositions = new Float32Array(64 * 3);
+    this.attackColors = new Float32Array(64 * 3);
+    this.attackSizes = new Float32Array(64);
+    this.attackBuffer = uploadPoints(gl, {
+      positions: this.attackPositions, colors: this.attackColors, sizes: this.attackSizes,
+    });
     this.aircraft = uploadGeometry(gl, buildAircraftGeometry());
     this.elevonLeft = uploadGeometry(gl, buildElevonGeometry(-1));
     this.elevonRight = uploadGeometry(gl, buildElevonGeometry(1));
@@ -72,6 +97,7 @@ class WebglRenderer {
     this.ring = uploadGeometry(gl, buildRingGeometry(46));
     this.crate = uploadGeometry(gl, buildCrateGeometry());
     this.beacon = uploadGeometry(gl, buildBeaconGeometry(90));
+    this.target = uploadGeometry(gl, buildTargetGeometry());
     this.seaPlane = uploadPositions(gl, new Float32Array([
       -9000, 0, -9000, 9000, 0, -9000, 9000, 0, 9000,
       -9000, 0, -9000, 9000, 0, 9000, -9000, 0, 9000,
@@ -91,26 +117,33 @@ class WebglRenderer {
     const width = this.canvas.width, height = this.canvas.height;
     gl.viewport(0, 0, width, height);
     const aspect = width / height;
-    const fov = 1.02;
-    const proj = perspectiveMatrix(fov, aspect, 0.6, 16000);
-    const viewMat = viewMatrixFromBasis(view);
-    const viewProj = multiplyMatrices(proj, viewMat);
-    const camPos = [view.cam.x, view.cam.y, view.cam.z];
+    const renderAircraft = state.renderAircraft || state.aircraft;
+    const fov = 1.02 + (renderAircraft.boostBlend || 0) * 0.17;
+    perspectiveMatrix(fov, aspect, 0.6, 16000, this.proj);
+    viewMatrixFromBasis(view, this.viewMat);
+    multiplyMatrices(this.proj, this.viewMat, this.viewProj);
+    const viewProj = this.viewProj;
+    this.camPos[0] = view.cam.x;
+    this.camPos[1] = view.cam.y;
+    this.camPos[2] = view.cam.z;
+    const camPos = this.camPos;
     gl.clearColor(FOG_COLOR[0], FOG_COLOR[1], FOG_COLOR[2], 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-    this.drawSky(view, fov, aspect);
+    // Opaque world first, then sea and sky: depth rejects the sea under
+    // land and the sky behind the city, cutting full-screen overdraw.
+    this.drawLit(this.terrain, viewProj, this.identity, camPos, false);
+    this.drawLit(this.streets, viewProj, this.identity, camPos, false);
+    this.drawLit(this.runway, viewProj, this.identity, camPos, false);
+    this.drawLit(this.harbor, viewProj, this.identity, camPos, false);
+    this.drawLit(this.landmarks, viewProj, this.identity, camPos, false);
+    this.drawLit(this.city, viewProj, this.identity, camPos, true);
     this.drawSea(viewProj, camPos, state.time);
-    this.drawLit(this.terrain, viewProj, identityMatrix(), camPos, false);
-    this.drawLit(this.streets, viewProj, identityMatrix(), camPos, false);
-    this.drawLit(this.runway, viewProj, identityMatrix(), camPos, false);
-    this.drawLit(this.harbor, viewProj, identityMatrix(), camPos, false);
-    this.drawLit(this.landmarks, viewProj, identityMatrix(), camPos, false);
-    this.drawLit(this.city, viewProj, identityMatrix(), camPos, true);
     this.drawTraffic(state, viewProj, camPos);
-    this.drawPoints(this.streetlights, viewProj, camPos, identityMatrix());
     this.drawMissionObjects(state, viewProj, camPos);
-    this.drawClouds(view, viewProj);
     this.drawAircraft(state, viewProj, camPos);
+    this.drawSky(view, fov, aspect);
+    this.drawPoints(this.streetlights, viewProj, camPos, this.identity);
+    this.drawClouds(view, viewProj);
   }
 
   drawSky(view, fov, aspect) {
@@ -144,7 +177,7 @@ class WebglRenderer {
     const gl = this.gl;
     gl.useProgram(this.lit.program);
     bindLitGeometry(gl, this.lit, geometry);
-    gl.uniformMatrix4fv(this.lit.uniforms.uMvp, false, multiplyMatrices(viewProj, model));
+    gl.uniformMatrix4fv(this.lit.uniforms.uMvp, false, multiplyMatrices(viewProj, model, this.mvpScratch));
     gl.uniformMatrix4fv(this.lit.uniforms.uModel, false, model);
     gl.uniform3f(this.lit.uniforms.uSunDir, SUN_DIR[0], SUN_DIR[1], SUN_DIR[2]);
     gl.uniform3f(this.lit.uniforms.uCamPos, camPos[0], camPos[1], camPos[2]);
@@ -157,52 +190,116 @@ class WebglRenderer {
   }
 
   drawTraffic(state, viewProj, camPos) {
-    for (const car of state.traffic) {
-      const pose = trafficPose(car, state.time, state.heights);
-      const mesh = this.carMeshes.get(car.color.join(','));
-      this.drawLit(mesh, viewProj, bodyMatrix(pose.x, pose.y, pose.z, pose.heading, 0, 0), camPos, false);
+    for (let i = 0; i < state.traffic.length; i++) {
+      const car = state.traffic[i];
+      const pose = trafficPose(car, state.time, state.heights, this.carPose);
+      if (!car.colorKey) car.colorKey = car.color.join(',');
+      let mesh = this.carMeshes.get(car.colorKey);
+      if (!mesh) {
+        mesh = uploadGeometry(this.gl, buildCarGeometry(car.color));
+        this.carMeshes.set(car.colorKey, mesh);
+      }
+      bodyMatrix(pose.x, pose.y, pose.z, pose.heading, 0, 0, 1, this.modelScratch);
+      this.drawLit(mesh, viewProj, this.modelScratch, camPos, false);
     }
   }
 
   drawMissionObjects(state, viewProj, camPos) {
     const mission = state.mission;
-    if (state.missionKind === 'canyon') {
-      mission.rings.forEach((gate, i) => {
+    if (state.missionKind === 'canyon' || state.missionKind === 'rings') {
+      for (let i = 0; i < mission.rings.length; i++) {
+        const ring = mission.rings[i];
         const prev = mission.rings[Math.max(0, i - 1)];
         const next = mission.rings[Math.min(mission.rings.length - 1, i + 1)];
-        const model = facingMatrix(gate.x, gate.y, gate.z, next.x - prev.x, next.z - prev.z);
-        const scaled = multiplyMatrices(model, bodyMatrix(0, 0, 0, 0, 0, 0, gate.radius / 46));
-        this.drawLit(this.ring, viewProj, scaled, camPos, false);
-      });
+        facingMatrix(ring.x, ring.y, ring.z, next.x - prev.x, next.z - prev.z, this.modelScratch);
+        if (state.missionKind === 'canyon') {
+          bodyMatrix(0, 0, 0, 0, 0, 0, ring.radius / 46, this.modelScratch2);
+          multiplyMatrices(this.modelScratch, this.modelScratch2, this.modelScratch3);
+          this.drawLit(this.ring, viewProj, this.modelScratch3, camPos, false);
+        } else {
+          this.drawLit(this.ring, viewProj, this.modelScratch, camPos, false);
+        }
+      }
     }
-    if (state.missionKind === 'courier') {
+    if (state.missionKind === 'courier' || state.missionKind === 'cargo') {
       const t = mission.target;
       if (t) {
         const ground = terrainHeightAt(state.heights, t.x, t.z) + 1.2;
-        this.drawLit(this.beacon, viewProj, translateMatrix(t.x, ground, t.z), camPos, false);
+        translateMatrix(t.x, ground, t.z, this.modelScratch);
+        this.drawLit(this.beacon, viewProj, this.modelScratch, camPos, false);
       }
       if (mission.crate) {
         const c = mission.crate;
-        this.drawLit(this.crate, viewProj, bodyMatrix(c.x, c.y, c.z, state.time * 0.4, 0, Math.sin(state.time * 1.3) * 0.12), camPos, false);
+        bodyMatrix(c.x, c.y, c.z, state.time * 0.4, 0, Math.sin(state.time * 1.3) * 0.12, 1, this.modelScratch);
+        this.drawLit(this.crate, viewProj, this.modelScratch, camPos, false);
       }
     }
-    if (state.missionKind === 'rings') {
-      mission.rings.forEach((ring, i) => {
-        const prev = mission.rings[Math.max(0, i - 1)];
-        const next = mission.rings[Math.min(mission.rings.length - 1, i + 1)];
-        const model = facingMatrix(ring.x, ring.y, ring.z, next.x - prev.x, next.z - prev.z);
-        this.drawLit(this.ring, viewProj, model, camPos, false);
-      });
-    }
-    if (state.missionKind === 'cargo') {
-      const t = mission.target;
-      const ground = terrainHeightAt(state.heights, t.x, t.z) + 1.2;
-      this.drawLit(this.beacon, viewProj, translateMatrix(t.x, ground, t.z), camPos, false);
-      if (mission.crate) {
-        const c = mission.crate;
-        this.drawLit(this.crate, viewProj, bodyMatrix(c.x, c.y, c.z, state.time * 0.4, 0, Math.sin(state.time * 1.3) * 0.12), camPos, false);
+    if (state.missionKind === 'attack') this.drawAttackObjects(state, viewProj, camPos);
+  }
+
+  drawAttackObjects(state, viewProj, camPos) {
+    const mission = state.mission;
+    for (let i = 0; i < mission.targets.length; i++) {
+      const target = mission.targets[i];
+      const active = i === mission.targetIndex;
+      const scale = active ? 1 + Math.sin(state.time * 5) * 0.06 : 0.82;
+      bodyMatrix(target.x, target.y - 7.5, target.z, 0, 0, 0, scale, this.modelScratch);
+      this.drawLit(this.target, viewProj, this.modelScratch, camPos, false);
+      if (active) {
+        bodyMatrix(target.x, target.y - 7.4, target.z, 0, 0, 0, 0.38, this.modelScratch);
+        this.drawLit(this.beacon, viewProj, this.modelScratch, camPos, false);
       }
     }
+    let count = 0;
+    const put = (x, y, z, r, g, b, size) => {
+      if (count >= 64) return;
+      this.attackPositions[count * 3] = x;
+      this.attackPositions[count * 3 + 1] = y;
+      this.attackPositions[count * 3 + 2] = z;
+      this.attackColors[count * 3] = r;
+      this.attackColors[count * 3 + 1] = g;
+      this.attackColors[count * 3 + 2] = b;
+      this.attackSizes[count] = size;
+      count++;
+    };
+    if (state.time < mission.pulseUntil) {
+      const a = state.renderAircraft || state.aircraft;
+      const noseX = a.x + Math.sin(a.heading) * Math.cos(a.pitch) * 6;
+      const noseY = a.y + Math.sin(a.pitch) * 6;
+      const noseZ = a.z - Math.cos(a.heading) * Math.cos(a.pitch) * 6;
+      for (let i = 0; i < 18; i++) {
+        const t = i / 17;
+        put(
+          noseX + (mission.pulseX - noseX) * t,
+          noseY + (mission.pulseY - noseY) * t,
+          noseZ + (mission.pulseZ - noseZ) * t,
+          0.45, 0.95, 1, 2.2 + t * 2.4,
+        );
+      }
+    }
+    if (state.time < mission.hitUntil) {
+      const age = 0.7 - (mission.hitUntil - state.time);
+      const radius = 4 + age * 26;
+      for (let i = 0; i < 22; i++) {
+        const angle = i * 2.39996;
+        put(
+          mission.hitX + Math.cos(angle) * radius,
+          mission.hitY + Math.sin(i * 1.7) * radius * 0.35,
+          mission.hitZ + Math.sin(angle) * radius,
+          1, 0.62, 0.2, 3.2,
+        );
+      }
+    }
+    if (!count) return;
+    const gl = this.gl;
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.attackBuffer.positions.buffer);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.attackPositions);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.attackBuffer.colors.buffer);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.attackColors);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.attackBuffer.sizes.buffer);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.attackSizes);
+    this.attackBuffer.count = count;
+    this.drawPoints(this.attackBuffer, viewProj, camPos, this.identity);
   }
 
   drawClouds(view, viewProj) {
@@ -231,7 +328,7 @@ class WebglRenderer {
     gl.depthMask(false);
     gl.useProgram(this.points.program);
     bindPoints(gl, this.points, points);
-    gl.uniformMatrix4fv(this.points.uniforms.uViewProj, false, multiplyMatrices(viewProj, model));
+    gl.uniformMatrix4fv(this.points.uniforms.uViewProj, false, multiplyMatrices(viewProj, model, this.pointsMvpScratch));
     gl.uniform3f(this.points.uniforms.uCamPos, camPos[0], camPos[1], camPos[2]);
     gl.drawArrays(gl.POINTS, 0, points.count);
     gl.depthMask(true);
@@ -239,71 +336,87 @@ class WebglRenderer {
   }
 
   drawAircraft(state, viewProj, camPos) {
-    const a = state.aircraft;
-    const model = bodyMatrix(a.x, a.y, a.z, a.heading, a.pitch, a.roll);
+    if (state.cockpitView) return; // the 2D panel is the cockpit; no fin in the sight picture
+    const a = state.renderAircraft || state.aircraft;
+    const model = bodyMatrix(a.x, a.y, a.z, a.heading, a.pitch, a.roll, 1, this.modelScratch);
     this.drawLit(this.aircraft, viewProj, model, camPos, false);
-    this.drawLit(this.exhaust, viewProj, model, camPos, false);
+    bodyMatrix(0, 0, 0, 0, 0, 0, 1 + (a.boostBlend || 0) * 0.35, this.modelScratch2);
+    multiplyMatrices(model, this.modelScratch2, this.modelScratch3);
+    this.drawLit(this.exhaust, viewProj, this.modelScratch3, camPos, false);
     // Elevons hinge at the trailing edge; differential deflection follows
     // roll, common deflection follows pitch, so inputs show on the airframe.
     const hingeY = 0.14, hingeZ = 2.35;
-    for (const [geometry, side] of [[this.elevonLeft, -1], [this.elevonRight, 1]]) {
+    const drawElevon = (geometry, side) => {
       const deflect = a.pitch * 0.5 + a.roll * side * 0.35;
-      const local = multiplyMatrices(
-        translateMatrix(0, hingeY, hingeZ),
-        bodyMatrix(0, 0, 0, 0, deflect, 0),
-      );
-      this.drawLit(geometry, viewProj, multiplyMatrices(model, local), camPos, false);
-    }
+      translateMatrix(0, hingeY, hingeZ, this.modelScratch2);
+      bodyMatrix(0, 0, 0, 0, deflect, 0, 1, this.modelScratch3);
+      multiplyMatrices(this.modelScratch2, this.modelScratch3, this.mvpScratch);
+      multiplyMatrices(model, this.mvpScratch, this.modelScratch3);
+      this.drawLit(geometry, viewProj, this.modelScratch3, camPos, false);
+    };
+    drawElevon(this.elevonLeft, -1);
+    drawElevon(this.elevonRight, 1);
     this.drawPoints(this.navLights, viewProj, camPos, model);
     this.drawVaporTrails(state, viewProj, camPos, model);
   }
 
   // Wingtip vapor: hard turns at speed shed a fading white trail from
   // each tip, so aggressive flying shows on the airframe and the sky.
+  // Ring buffers and preallocated point arrays keep this allocation-free.
   drawVaporTrails(state, viewProj, camPos, model) {
-    const a = state.aircraft;
-    const shedding = !a.onGround && Math.abs(a.roll) > 0.32 && a.speed > 38;
-    const tips = [[-7.6, 0.3, 2.5], [7.6, 0.3, 2.5]];
-    const trails = [this.trailLeft, this.trailRight];
-    tips.forEach((tip, i) => {
-      if (shedding) {
-        trails[i].push(applyModel(model, tip));
-        if (trails[i].length > 42) trails[i].shift();
-      } else if (trails[i].length) {
-        trails[i].shift();
-      }
-    });
-    const positions = [], colors = [], sizes = [];
-    for (const trail of trails) {
-      trail.forEach((p, i) => {
-        const fade = i / Math.max(1, trail.length);
-        positions.push(p[0], p[1], p[2]);
-        colors.push(0.95, 0.9, 0.88);
-        sizes.push(1.2 + fade * 2.6);
-      });
-    }
-    if (!positions.length) return;
+    const a = state.renderAircraft || state.aircraft;
+    const shedding = !a.onGround && a.speed > 38
+      && (Math.abs(a.roll) > 0.32 || (a.boostBlend || 0) > 0.55);
+    this.updateTrail(this.trailLeft, model, -7.6, shedding);
+    this.updateTrail(this.trailRight, model, 7.6, shedding);
+    let count = 0;
+    count = this.writeTrail(this.trailLeft, count);
+    count = this.writeTrail(this.trailRight, count);
+    if (!count) return;
     const gl = this.gl;
-    if (!this.trailBuffer) this.trailBuffer = uploadPoints(gl, {
-      positions: new Float32Array(3), colors: new Float32Array(3), sizes: new Float32Array(1),
-    });
     gl.bindBuffer(gl.ARRAY_BUFFER, this.trailBuffer.positions.buffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.DYNAMIC_DRAW);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.trailPositions);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.trailBuffer.colors.buffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colors), gl.DYNAMIC_DRAW);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.trailColors);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.trailBuffer.sizes.buffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(sizes), gl.DYNAMIC_DRAW);
-    this.trailBuffer.count = sizes.length;
-    this.drawPoints(this.trailBuffer, viewProj, camPos, identityMatrix());
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.trailSizes);
+    this.trailBuffer.count = count;
+    this.drawPoints(this.trailBuffer, viewProj, camPos, this.identity);
+  }
+
+  updateTrail(trail, model, tipX, shedding) {
+    if (shedding) {
+      const index = (trail.start + trail.count) % 48;
+      applyModelInto(trail.data, index * 3, model, tipX, 0.3, 2.5);
+      if (trail.count < 48) trail.count++;
+      else trail.start = (trail.start + 1) % 48;
+    } else if (trail.count > 0) {
+      trail.start = (trail.start + 1) % 48;
+      trail.count--;
+    }
+  }
+
+  writeTrail(trail, count) {
+    for (let i = 0; i < trail.count; i++) {
+      const source = ((trail.start + i) % 48) * 3;
+      const fade = i / Math.max(1, trail.count);
+      this.trailPositions[count * 3] = trail.data[source];
+      this.trailPositions[count * 3 + 1] = trail.data[source + 1];
+      this.trailPositions[count * 3 + 2] = trail.data[source + 2];
+      this.trailColors[count * 3] = 0.95;
+      this.trailColors[count * 3 + 1] = 0.9;
+      this.trailColors[count * 3 + 2] = 0.88;
+      this.trailSizes[count] = 1.2 + fade * 2.6;
+      count++;
+    }
+    return count;
   }
 }
 
-function applyModel(m, [x, y, z]) {
-  return [
-    m[0] * x + m[4] * y + m[8] * z + m[12],
-    m[1] * x + m[5] * y + m[9] * z + m[13],
-    m[2] * x + m[6] * y + m[10] * z + m[14],
-  ];
+function applyModelInto(out, offset, m, x, y, z) {
+  out[offset] = m[0] * x + m[4] * y + m[8] * z + m[12];
+  out[offset + 1] = m[1] * x + m[5] * y + m[9] * z + m[13];
+  out[offset + 2] = m[2] * x + m[6] * y + m[10] * z + m[14];
 }
 
 function compileProgram(gl, vertexSource, fragmentSource) {

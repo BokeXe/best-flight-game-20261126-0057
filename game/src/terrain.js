@@ -78,18 +78,24 @@ export function buildTraffic(seed) {
   return cars;
 }
 
-export function trafficPose(car, time, heights) {
-  // Returns world position + heading for one car at a mission time.
+export function trafficPose(car, time, heights, out = null) {
+  // Returns world position + heading for one car at a mission time. The
+  // renderer passes one scratch pose so 74 cars allocate nothing per frame.
+  const pose = out || { x: 0, y: 0, z: 0, heading: 0 };
   if (car.axis === 'z') {
     const span = 1700;
-    const z = -1020 + ((car.offset + car.dir * car.speed * time) % span + span) % span;
-    const x = car.road + car.lane;
-    return { x, y: terrainHeightAt(heights, x, z) + 0.9, z, heading: car.dir > 0 ? Math.PI : 0 };
+    pose.z = -1020 + ((car.offset + car.dir * car.speed * time) % span + span) % span;
+    pose.x = car.road + car.lane;
+    pose.y = terrainHeightAt(heights, pose.x, pose.z) + 0.9;
+    pose.heading = car.dir > 0 ? Math.PI : 0;
+    return pose;
   }
   const span = 860;
-  const x = -320 + ((car.offset + car.dir * car.speed * time) % span + span) % span;
-  const z = car.road + car.lane;
-  return { x, y: terrainHeightAt(heights, x, z) + 0.9, z, heading: car.dir > 0 ? Math.PI / 2 : -Math.PI / 2 };
+  pose.x = -320 + ((car.offset + car.dir * car.speed * time) % span + span) % span;
+  pose.z = car.road + car.lane;
+  pose.y = terrainHeightAt(heights, pose.x, pose.z) + 0.9;
+  pose.heading = car.dir > 0 ? Math.PI / 2 : -Math.PI / 2;
+  return pose;
 }
 
 function makeSeededRandom(seed) {

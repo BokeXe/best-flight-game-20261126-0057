@@ -34,25 +34,28 @@ export function createAudioEngine() {
       noise.connect(windFilter).connect(windGain).connect(ctx.destination);
       noise.start();
     },
-    update(throttle, speed, stalled) {
+    update(throttle, speed, stalled, boost = 0) {
       if (!ctx) return;
       const t = ctx.currentTime;
-      engineOsc.frequency.setTargetAtTime(52 + throttle * 95, t, 0.08);
-      engineGain.gain.setTargetAtTime(0.015 + throttle * 0.05, t, 0.1);
-      windGain.gain.setTargetAtTime(Math.min(0.09, speed * 0.0011), t, 0.15);
-      windFilter.frequency.setTargetAtTime(500 + speed * 9, t, 0.2);
+      engineOsc.frequency.setTargetAtTime(52 + throttle * 95 + boost * 42, t, 0.08);
+      engineGain.gain.setTargetAtTime(0.015 + throttle * 0.05 + boost * 0.04, t, 0.1);
+      windGain.gain.setTargetAtTime(Math.min(0.13, speed * 0.0011 + boost * 0.025), t, 0.15);
+      windFilter.frequency.setTargetAtTime(500 + speed * 9 + boost * 520, t, 0.2);
       if (stalled) engineOsc.frequency.setTargetAtTime(38, t, 0.05);
     },
     chime(kind) {
       if (!ctx) return;
       const t = ctx.currentTime;
-      const notes = kind === 'ring' ? [880, 1318] : kind === 'drop' ? [520, 390] : [660, 880, 1100];
+      const notes = kind === 'ring' ? [880, 1318]
+        : kind === 'drop' ? [520, 390]
+          : kind === 'hit' ? [740, 1108, 1480]
+            : kind === 'fire' ? [1180, 760] : [660, 880, 1100];
       notes.forEach((freq, i) => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
-        osc.type = 'sine';
+        osc.type = kind === 'fire' ? 'square' : 'sine';
         osc.frequency.value = freq;
-        gain.gain.setValueAtTime(0.12, t + i * 0.09);
+        gain.gain.setValueAtTime(kind === 'fire' ? 0.045 : 0.12, t + i * 0.09);
         gain.gain.exponentialRampToValueAtTime(0.001, t + i * 0.09 + 0.3);
         osc.connect(gain).connect(ctx.destination);
         osc.start(t + i * 0.09);

@@ -237,6 +237,53 @@ export function buildCrateGeometry() {
   return b.build();
 }
 
+// A harbour-range training marker: a glowing ground ring with cross
+// bars and a striped pylon, readable from a diving attack pass.
+export function buildTargetGeometry() {
+  const b = new PartBuilder();
+  const ringColor = [1, 0.32, 0.18];
+  const segs = 28;
+  const inner = [], outer = [];
+  for (let i = 0; i <= segs; i++) {
+    const a = (i / segs) * Math.PI * 2;
+    inner.push(b.vertex(Math.cos(a) * 19, 0.25, Math.sin(a) * 19, [0, 1, 0], ringColor, 1.5));
+    outer.push(b.vertex(Math.cos(a) * 27, 0.25, Math.sin(a) * 27, [0, 1, 0], ringColor, 1.5));
+  }
+  for (let i = 0; i < segs; i++) b.quad(inner[i], outer[i], outer[i + 1], inner[i + 1]);
+  const cross = [1, 0.85, 0.35];
+  const strip = (x0, z0, x1, z1) => {
+    const ids = [
+      b.vertex(x0, 0.35, z0, [0, 1, 0], cross, 1.1),
+      b.vertex(x1, 0.35, z0, [0, 1, 0], cross, 1.1),
+      b.vertex(x1, 0.35, z1, [0, 1, 0], cross, 1.1),
+      b.vertex(x0, 0.35, z1, [0, 1, 0], cross, 1.1),
+    ];
+    b.quad(ids[0], ids[1], ids[2], ids[3]);
+  };
+  strip(-24, -2.4, 24, 2.4);
+  strip(-2.4, -24, 2.4, 24);
+  // Striped pylon: four side faces plus a glowing cap.
+  const pylon = [0.92, 0.9, 0.86];
+  const faces = [
+    [[-2, 0, -2], [2, 0, -2], [2, 16, -2], [-2, 16, -2], [0, 0, -1]],
+    [[2, 0, 2], [-2, 0, 2], [-2, 16, 2], [2, 16, 2], [0, 0, 1]],
+    [[-2, 0, 2], [-2, 0, -2], [-2, 16, -2], [-2, 16, 2], [-1, 0, 0]],
+    [[2, 0, -2], [2, 0, 2], [2, 16, 2], [2, 16, -2], [1, 0, 0]],
+  ];
+  for (const [p0, p1, p2, p3, n] of faces) {
+    const ids = [p0, p1, p2, p3].map(([x, y, z]) => b.vertex(x, y, z, n, pylon));
+    b.quad(ids[0], ids[1], ids[2], ids[3]);
+  }
+  const cap = [
+    b.vertex(-2.6, 16, -2.6, [0, 1, 0], ringColor, 1.8),
+    b.vertex(2.6, 16, -2.6, [0, 1, 0], ringColor, 1.8),
+    b.vertex(2.6, 16, 2.6, [0, 1, 0], ringColor, 1.8),
+    b.vertex(-2.6, 16, 2.6, [0, 1, 0], ringColor, 1.8),
+  ];
+  b.quad(cap[0], cap[1], cap[2], cap[3]);
+  return b.build();
+}
+
 export function buildBeaconGeometry(radius) {
   const b = new PartBuilder();
   const color = [0.3, 1, 0.55];

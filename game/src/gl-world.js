@@ -91,24 +91,33 @@ export function buildTerrainGeometry(heights) {
   const b = new GeometryBuilder();
   const stride = GRID_CELLS + 1;
   const sunDir = normalize3([-0.92, 0.18, -0.35]);
-  for (let gz = 0; gz < GRID_CELLS; gz++) {
-    for (let gx = 0; gx < GRID_CELLS; gx++) {
-      const corners = [[gx, gz], [gx + 1, gz], [gx + 1, gz + 1], [gx, gz + 1]];
-      const pts = corners.map(([cx, cz]) => {
-        const x = -WORLD_SIZE / 2 + cx * CELL_METRES;
-        const z = -WORLD_SIZE / 2 + cz * CELL_METRES;
-        return [x, heights[cz * stride + cx], z];
-      });
-      const n = faceNormal(pts[0], pts[1], pts[2]);
-      const avgH = (pts[0][1] + pts[2][1]) / 2;
+  // Shared vertices on the 30 m heightfield grid (19,881 verts):
+  // a quarter of the duplicated-corner vertex work, with the runway
+  // flattening and shoreline kept at full resolution.
+  const step = 1;
+  const rowVerts = GRID_CELLS / step + 1;
+  for (let gz = 0; gz <= GRID_CELLS; gz += step) {
+    for (let gx = 0; gx <= GRID_CELLS; gx += step) {
+      const x = -WORLD_SIZE / 2 + gx * CELL_METRES;
+      const z = -WORLD_SIZE / 2 + gz * CELL_METRES;
+      const h = heights[gz * stride + gx];
+      const hL = heights[gz * stride + Math.max(0, gx - 1)];
+      const hR = heights[gz * stride + Math.min(GRID_CELLS, gx + 1)];
+      const hD = heights[Math.max(0, gz - 1) * stride + gx];
+      const hU = heights[Math.min(GRID_CELLS, gz + 1) * stride + gx];
+      const n = normalize3([-(hR - hL) / (2 * CELL_METRES), 1, -(hU - hD) / (2 * CELL_METRES)]);
       const slope = 1 - n[1];
       const light = 0.82 + Math.max(0, dot3(n, sunDir)) * 0.35;
       const patch = ((gx * 31 + gz * 57) % 97) / 97;
-      const urban = urbanAmount(pts[0][0], pts[0][2]);
-      const raw = parseRgb(groundColour(avgH, slope, patch, light, urban));
+      const raw = parseRgb(groundColour(h, slope, patch, light, urbanAmount(x, z)));
       const color = raw.map((c) => Math.min(1, c * 1.32 + 0.04));
-      const ids = pts.map(([x, y, z]) => b.vertex(x, y, z, n[0], n[1], n[2], color));
-      b.quad(ids[0], ids[1], ids[2], ids[3]);
+      b.vertex(x, h, z, n[0], n[1], n[2], color);
+    }
+  }
+  for (let gz = 0; gz < GRID_CELLS; gz += step) {
+    for (let gx = 0; gx < GRID_CELLS; gx += step) {
+      const a = (gz / step) * rowVerts + gx / step;
+      b.quad(a, a + 1, a + rowVerts + 1, a + rowVerts);
     }
   }
   return b.build();

@@ -20,10 +20,13 @@ precision mediump float;
 varying vec3 vDir;
 uniform vec3 uSunDir;
 float hash(vec3 p) {
-  return fract(sin(dot(p, vec3(12.9898, 78.233, 45.164))) * 43758.5453);
+  p = fract(p * 0.1031);
+  p += dot(p, p.zyx + 31.32);
+  return fract((p.x + p.y) * p.z);
 }
 void main() {
-  float h = clamp(vDir.y, -0.08, 1.0);
+  vec3 dir = normalize(vDir);
+  float h = clamp(dir.y, -0.08, 1.0);
   vec3 horizon = vec3(0.98, 0.62, 0.32);
   vec3 rose = vec3(0.86, 0.42, 0.42);
   vec3 violet = vec3(0.34, 0.24, 0.48);
@@ -31,12 +34,22 @@ void main() {
   vec3 col = mix(horizon, rose, smoothstep(0.0, 0.16, h));
   col = mix(col, violet, smoothstep(0.12, 0.42, h));
   col = mix(col, zenith, smoothstep(0.38, 0.85, h));
-  float sunAmount = max(dot(normalize(vDir), normalize(uSunDir)), 0.0);
-  col += vec3(1.0, 0.55, 0.22) * pow(sunAmount, 10.0) * 0.45;
-  col += vec3(1.0, 0.72, 0.35) * pow(sunAmount, 90.0) * 0.8;
+  float sunAmount = max(dot(dir, uSunDir), 0.0);
+  float s2 = sunAmount * sunAmount;
+  float s4 = s2 * s2;
+  float s8 = s4 * s4;
+  float p10 = s8 * s2;
+  float p20 = p10 * p10;
+  float p40 = p20 * p20;
+  float p80 = p40 * p40;
+  col += vec3(1.0, 0.55, 0.22) * p10 * 0.45;
+  col += vec3(1.0, 0.72, 0.35) * (p80 * p10) * 0.8;
   col += vec3(1.0, 0.9, 0.65) * smoothstep(0.99955, 0.99985, sunAmount) * 1.25;
-  vec3 cell = floor(normalize(vDir) * 160.0);
-  float star = step(0.9985, hash(cell)) * smoothstep(0.25, 0.6, h);
+  float star = 0.0;
+  if (h > 0.25) {
+    vec3 cell = floor(dir * 160.0);
+    star = step(0.9985, hash(cell)) * smoothstep(0.25, 0.6, h);
+  }
   col += vec3(0.8, 0.85, 1.0) * star * 0.5;
   gl_FragColor = vec4(col, 1.0);
 }`;
@@ -58,7 +71,9 @@ uniform vec3 uSunDir;
 uniform float uTime;
 uniform vec3 uFogColor;
 float hash(vec2 p) {
-  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+  vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
 }
 float noise(vec2 p) {
   vec2 i = floor(p), f = fract(p);
@@ -69,16 +84,26 @@ float noise(vec2 p) {
 void main() {
   vec3 viewDir = normalize(uCamPos - vWorld);
   vec2 p = vWorld.xz * 0.045;
-  float n = noise(p + vec2(uTime * 0.22, uTime * 0.13)) * 0.6
-          + noise(p * 3.1 - vec2(uTime * 0.31, 0.0)) * 0.4;
-  vec3 normal = normalize(vec3((n - 0.5) * 0.55, 1.0, (noise(p * 1.7 + 7.0) - 0.5) * 0.55));
+  float n1 = noise(p + vec2(uTime * 0.22, uTime * 0.13));
+  float n2 = noise(p * 3.1 - vec2(uTime * 0.31, 0.0));
+  float n = n1 * 0.6 + n2 * 0.4;
+  vec3 normal = normalize(vec3((n - 0.5) * 0.55, 1.0, (n1 - 0.5) * 0.55));
   vec3 base = mix(vec3(0.10, 0.16, 0.34), vec3(0.32, 0.20, 0.34), 0.45);
-  float fresnel = pow(1.0 - max(viewDir.y, 0.0), 2.0);
+  float fresnelBase = 1.0 - max(viewDir.y, 0.0);
+  float fresnel = fresnelBase * fresnelBase;
   base = mix(base, vec3(0.55, 0.30, 0.30), fresnel * 0.55);
-  vec3 reflected = reflect(-normalize(uSunDir), normal);
-  float spec = pow(max(dot(reflected, viewDir), 0.0), 140.0);
-  float sparkle = step(0.72, noise(vWorld.xz * 0.6 + uTime * 1.4));
-  vec3 col = base + vec3(1.0, 0.62, 0.28) * spec * (1.6 + sparkle * 2.4);
+  vec3 reflected = reflect(-uSunDir, normal);
+  float specBase = max(dot(reflected, viewDir), 0.0);
+  float spec2 = specBase * specBase;
+  float spec4 = spec2 * spec2;
+  float spec8 = spec4 * spec4;
+  float spec16 = spec8 * spec8;
+  float spec32 = spec16 * spec16;
+  float spec64 = spec32 * spec32;
+  float spec128 = spec64 * spec64;
+  float spec = spec128 * spec8 * spec4;
+  float sparkle = step(0.72, n2);
+  vec3 col = base + vec3(1.0, 0.62, 0.28) * spec * (2.0 + sparkle * 3.0);
   float dist = length(uCamPos - vWorld);
   float fog = 1.0 - exp(-dist * dist * 0.000000048);
   gl_FragColor = vec4(mix(col, uFogColor, fog), 1.0);
@@ -92,7 +117,8 @@ attribute vec2 aUv;
 attribute float aEmissive;
 uniform mat4 uMvp;
 uniform mat4 uModel;
-varying vec3 vNormal;
+uniform vec3 uSunDir;
+varying float vDiffuse;
 varying vec3 vColor;
 varying vec2 vUv;
 varying vec3 vWorld;
@@ -100,7 +126,7 @@ varying float vEmissive;
 void main() {
   vec4 world = uModel * vec4(aPos, 1.0);
   vWorld = world.xyz;
-  vNormal = normalize(mat3(uModel) * aNormal);
+  vDiffuse = max(dot(normalize(mat3(uModel) * aNormal), uSunDir), 0.0);
   vColor = aColor;
   vUv = aUv;
   vEmissive = aEmissive;
@@ -109,27 +135,26 @@ void main() {
 
 export const LIT_FRAGMENT = `
 precision mediump float;
-varying vec3 vNormal;
+varying float vDiffuse;
 varying vec3 vColor;
 varying vec2 vUv;
 varying vec3 vWorld;
 varying float vEmissive;
-uniform vec3 uSunDir;
 uniform vec3 uCamPos;
 uniform vec3 uFogColor;
 uniform sampler2D uWindows;
 uniform float uUseWindows;
 void main() {
-  vec3 n = normalize(vNormal);
-  float diffuse = max(dot(n, normalize(uSunDir)), 0.0);
-  vec3 ambient = vec3(0.52, 0.46, 0.58);
-  vec3 sunlight = vec3(1.0, 0.62, 0.34) * diffuse * 1.1;
+  float diffuse = vDiffuse;
+  vec3 ambient = vec3(0.48, 0.42, 0.56);
+  vec3 sunlight = vec3(1.0, 0.62, 0.34) * diffuse * 1.22;
   vec3 col = vColor * (ambient + sunlight);
   if (uUseWindows > 0.5) {
     vec3 win = texture2D(uWindows, vUv).rgb;
-    col = col * 0.55 + win * (0.35 + diffuse * 0.2);
+    col = col * 0.5 + win * (0.42 + diffuse * 0.22);
   }
   col += vColor * vEmissive;
+  col *= 1.04;
   float dist = length(uCamPos - vWorld);
   float fog = 1.0 - exp(-dist * dist * 0.000000048);
   gl_FragColor = vec4(mix(col, uFogColor, fog), 1.0);

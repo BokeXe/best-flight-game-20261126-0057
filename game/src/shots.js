@@ -14,50 +14,69 @@ export function shotSceneFromUrl(search) {
 export function applyShotScene(state, scene) {
   const a = state.aircraft;
   if (scene.shot === 'cover') {
-    // Chase view banking over the downtown avenue canyon: traffic
-    // streaming below, towers either side, the next gate centred ahead,
-    // sunset sea beyond the skyline, instruments lit around the edges.
+    // Chase view banking hard over the downtown avenues: traffic and
+    // streetlights below, towers either side, the canyon gate ahead,
+    // sunset sea beyond the skyline, boost lit on the gauges.
     state.missionKind = 'canyon';
-    Object.assign(a, { x: 55, y: 84, z: 645, heading: 0.04, pitch: 0.0, roll: -0.25, speed: 56, throttle: 0.62, onGround: false, gearDown: false });
-    state.missionTime = 38;
-    state.score = 600;
-    state.cash = 360;
+    Object.assign(a, {
+      x: 120, y: 88, z: 700, heading: 0.1, pitch: -0.02, roll: -0.5,
+      speed: 60, throttle: 0.7, boostCharge: 0.65, boostBlend: 0.35,
+      onGround: false, gearDown: false,
+    });
+    state.missionTime = 42;
+    state.score = 900;
+    state.cash = 540;
     state.mission.ringIndex = 0;
     state.mission.target = state.mission.rings[0];
     state.mission.bannerText = 'Gate 1 of 9 — in the canyon, bonus live';
-  } else if (scene.shot === 'panel') {
-    // Cockpit view west over the city toward the harbour and sunset sea,
-    // instruments lit against the dusk.
-    state.missionKind = 'cargo';
+  } else if (scene.shot === 'attack') {
+    // Attack dive on the third harbour marker: cockpit sight tracking,
+    // tracer live, boost burning, cranes and glittering water below.
+    state.missionKind = 'attack';
     state.cockpitView = true;
-    Object.assign(a, { x: 260, y: 170, z: 240, heading: -1.35, pitch: -0.3, roll: 0.06, speed: 55, throttle: 0.55, onGround: false, gearDown: false });
-    state.missionTime = 63;
-    state.score = 0;
+    Object.assign(a, {
+      x: -60, y: 200, z: 640, heading: -0.84, pitch: -0.32, roll: -0.22,
+      speed: 76, throttle: 0.84, boostCharge: 0.6, boostBlend: 0.75,
+      onGround: false, gearDown: false,
+    });
+    state.missionTime = 47;
+    state.score = 1250;
+    state.cash = 620;
+    state.mission.targetIndex = 2;
+    state.mission.target = state.mission.targets[2];
+    state.mission.hits = 2;
+    state.mission.shots = 3;
   } else if (scene.shot === 'landing') {
-    // Final approach: coastal runway centred ahead, beach and city to the
-    // left, gear down, gentle descent.
+    // Final approach close over the threshold: runway large and centred,
+    // approach lights leading in, city lights beyond, gear and flaps set.
     state.missionKind = 'landing';
-    Object.assign(a, { x: 260, y: 52, z: 1400, heading: 0, pitch: -0.05, roll: 0.02, speed: 38, throttle: 0.3, onGround: false, gearDown: true });
-    state.missionTime = 88;
+    Object.assign(a, { x: 260, y: 34, z: 1245, heading: 0, pitch: -0.04, roll: 0.02, speed: 34, throttle: 0.28, onGround: false, gearDown: true });
+    state.missionTime = 92;
     state.score = 0;
   } else if (scene.shot === 'drop') {
     // Cargo away over the harbour: crate under its parachute ahead of the
-    // aircraft, drop beacon and cranes below.
+    // aircraft, drop beacon, cranes and sunset sea below.
     state.missionKind = 'cargo';
-    Object.assign(a, { x: 300, y: 260, z: 220, heading: -1.35, pitch: 0.01, roll: -0.1, speed: 48, throttle: 0.5, onGround: false, gearDown: false });
+    Object.assign(a, { x: 120, y: 235, z: 330, heading: -1.22, pitch: 0.0, roll: -0.18, speed: 50, throttle: 0.5, onGround: false, gearDown: false });
     state.mission.dropped = true;
-    state.mission.crate = { x: 180, y: 245, z: 190, vx: -5, vy: -7, vz: -2 };
+    state.mission.crate = { x: -120, y: 210, z: 290, vx: -8, vy: -7, vz: -3 };
     state.mission.bannerText = 'Crate away — watch it fall';
-    state.missionTime = 52;
-    state.score = 0;
+    state.missionTime = 54;
+    state.score = 450;
+    state.cash = 225;
   }
+  state.time = state.missionTime;
   state.phase = 'flying';
   state.shotMode = true;
   return state;
 }
 
+// Gentle scripted flying for shot scenes: ease toward the target with
+// a mission-shaped altitude profile. Deterministic in mission state and
+// reuses one controls object, so the shot path allocates nothing.
+const AUTOPILOT_CONTROLS = { throttle: 0.5, pitch: 0, roll: 0, yaw: 0, brake: false, flaps: false, boost: false };
+
 export function autopilotControls(state) {
-  // Gentle scripted flying for shot scenes: hold altitude, ease toward target.
   const a = state.aircraft;
   const target = state.mission.target;
   let roll = 0;
@@ -68,8 +87,23 @@ export function autopilotControls(state) {
     while (diff < -Math.PI) diff += Math.PI * 2;
     roll = Math.max(-0.4, Math.min(0.4, diff * 0.8));
   }
-  const targetAltitude = state.missionKind === 'landing' ? 62
-    : state.missionKind === 'canyon' ? (target?.y ?? 96) : 240;
-  const pitch = Math.max(-0.12, Math.min(0.12, (targetAltitude - a.y) * 0.002));
-  return { throttle: a.throttle, pitch, roll, yaw: 0, brake: false, flaps: state.missionKind === 'landing' };
+  const attacking = state.missionKind === 'attack';
+  let desiredPitch = 0;
+  if (attacking && target) {
+    const horizontal = Math.hypot(target.x - a.x, target.z - a.z);
+    desiredPitch = Math.max(-0.34, Math.min(0.12, Math.atan2((target.y + 8) - a.y, horizontal)));
+  } else if (state.missionKind === 'landing') {
+    desiredPitch = -0.035;
+  } else if (state.missionKind === 'canyon' && target) {
+    desiredPitch = Math.max(-0.1, Math.min(0.1, (target.y - a.y) * 0.003));
+  }
+  const desiredRoll = Math.max(-0.5, Math.min(0.5, roll * 1.4));
+  AUTOPILOT_CONTROLS.throttle = a.throttle;
+  AUTOPILOT_CONTROLS.pitch = Math.max(-0.5, Math.min(0.5, (desiredPitch - a.pitch) * 2));
+  AUTOPILOT_CONTROLS.roll = Math.max(-0.7, Math.min(0.7, (desiredRoll - a.roll) * 2.2));
+  AUTOPILOT_CONTROLS.yaw = 0;
+  AUTOPILOT_CONTROLS.brake = false;
+  AUTOPILOT_CONTROLS.flaps = state.missionKind === 'landing';
+  AUTOPILOT_CONTROLS.boost = attacking || state.missionKind === 'canyon';
+  return AUTOPILOT_CONTROLS;
 }
