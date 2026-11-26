@@ -3,11 +3,13 @@
 // lights, mission banner, minimap and the off-screen target arrow.
 
 import { headingDegrees, STALL_SPEED } from './flight-model.js';
-import { RUNWAY, TOWN_CENTRE, LIGHTHOUSE, WORLD_SIZE } from './terrain.js';
+import { RUNWAY, CITY_CENTRE, HARBOR, LIGHTHOUSE, WORLD_SIZE, shorelineX } from './terrain.js';
 
-const INK = '#eaf3fb';
-const DIM = 'rgba(180,205,230,0.75)';
-const AMBER = '#ffd34d';
+// Dusk instrument palette: deep plum panels, warm amber accents and bright
+// ink stay readable against both the bright sunset sky and the dark ground.
+const INK = '#fff4e0';
+const DIM = 'rgba(255,205,170,0.78)';
+const AMBER = '#ffb347';
 const RED = '#ff5a4d';
 const GREEN = '#39d353';
 
@@ -28,9 +30,9 @@ export function drawHud(ctx, width, height, state) {
 }
 
 function panel(ctx, x, y, w, h) {
-  ctx.fillStyle = 'rgba(10,22,38,0.72)';
+  ctx.fillStyle = 'rgba(24,16,38,0.78)';
   ctx.beginPath(); ctx.roundRect(x, y, w, h, 10); ctx.fill();
-  ctx.strokeStyle = 'rgba(140,190,240,0.35)';
+  ctx.strokeStyle = 'rgba(255,179,71,0.4)';
   ctx.lineWidth = 1.5; ctx.stroke();
 }
 
@@ -109,9 +111,9 @@ export function drawArtificialHorizon(ctx, cx, cy, r, a) {
   ctx.translate(cx, cy);
   ctx.rotate(a.roll);
   const pitchPx = a.pitch * r * 1.6;
-  ctx.fillStyle = '#3d8fd1';
+  ctx.fillStyle = '#7a4a72';
   ctx.fillRect(-r * 2, -r * 2 + pitchPx, r * 4, r * 2);
-  ctx.fillStyle = '#8a6a42';
+  ctx.fillStyle = '#5d4632';
   ctx.fillRect(-r * 2, pitchPx, r * 4, r * 2);
   ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.moveTo(-r * 2, pitchPx); ctx.lineTo(r * 2, pitchPx); ctx.stroke();
@@ -172,15 +174,22 @@ function drawMinimap(ctx, width, height, state) {
   });
   ctx.save();
   ctx.beginPath(); ctx.roundRect(x + 3, y + 3, size - 6, size - 6, 8); ctx.clip();
-  ctx.fillStyle = '#1d6fa8'; ctx.fillRect(x, y, size, size);
-  ctx.fillStyle = '#5d9247';
+  ctx.fillStyle = '#274a73'; ctx.fillRect(x, y, size, size);
+  // Land east of the curved shoreline, traced from the same shore function.
+  ctx.fillStyle = '#6d6248';
   ctx.beginPath();
-  ctx.ellipse(x + size / 2 + 5, y + size / 2, size * 0.34, size * 0.3, 0.2, 0, Math.PI * 2);
-  ctx.fill();
+  for (let z = -WORLD_SIZE / 2; z <= WORLD_SIZE / 2; z += 140) {
+    const p = toMap(shorelineX(z), z);
+    if (z === -WORLD_SIZE / 2) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+  }
+  ctx.lineTo(x + size, y + size); ctx.lineTo(x + size, y);
+  ctx.closePath(); ctx.fill();
   const rw = toMap(RUNWAY.x, (RUNWAY.z0 + RUNWAY.z1) / 2);
   ctx.fillStyle = '#f5f7fa'; ctx.fillRect(rw.x - 2, rw.y - 8, 4, 16);
-  const town = toMap(TOWN_CENTRE.x, TOWN_CENTRE.z);
-  ctx.fillStyle = '#ffd34d'; ctx.beginPath(); ctx.arc(town.x, town.y, 3.5, 0, Math.PI * 2); ctx.fill();
+  const city = toMap(CITY_CENTRE.x, CITY_CENTRE.z);
+  ctx.fillStyle = '#ffb347'; ctx.beginPath(); ctx.arc(city.x, city.y, 4, 0, Math.PI * 2); ctx.fill();
+  const harbor = toMap(HARBOR.x, HARBOR.z);
+  ctx.fillStyle = '#7fd4ff'; ctx.beginPath(); ctx.arc(harbor.x, harbor.y, 3, 0, Math.PI * 2); ctx.fill();
   const lh = toMap(LIGHTHOUSE.x, LIGHTHOUSE.z);
   ctx.fillStyle = '#ff5a4d'; ctx.beginPath(); ctx.arc(lh.x, lh.y, 3, 0, Math.PI * 2); ctx.fill();
   const target = state.mission.target;
@@ -199,7 +208,7 @@ function drawMinimap(ctx, width, height, state) {
   ctx.restore();
   ctx.restore();
   ctx.fillStyle = DIM; ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'center';
-  ctx.fillText('KESTREL BAY', x + size / 2, y + size - 8);
+  ctx.fillText('SOLMERE COAST', x + size / 2, y + size - 8);
   void height;
 }
 

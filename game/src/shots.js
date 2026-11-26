@@ -14,34 +14,37 @@ export function shotSceneFromUrl(search) {
 export function applyShotScene(state, scene) {
   const a = state.aircraft;
   if (scene.shot === 'cover') {
-    // Chase view closing on ring 2: the gate fills the centre of the frame,
-    // patchwork fields and the west ridge spread out below and ahead.
+    // Chase view closing on ring 2 over the skyline: the gate fills the
+    // centre, lit towers below, sea and low sun ahead to the left.
     state.missionKind = 'rings';
-    Object.assign(a, { x: -548, y: 246, z: 348, heading: -0.5, pitch: 0.02, roll: -0.2, speed: 62, throttle: 0.62, onGround: false, gearDown: false });
+    Object.assign(a, { x: 300, y: 240, z: 40, heading: -0.9, pitch: 0.02, roll: -0.14, speed: 62, throttle: 0.62, onGround: false, gearDown: false });
     state.missionTime = 41;
     state.score = 150;
     state.mission.ringIndex = 1;
     state.mission.target = state.mission.rings[1];
     state.mission.bannerText = 'Ring 2 of 8 — follow the arrow';
   } else if (scene.shot === 'panel') {
-    // Cockpit view low over the harbour town, instruments lit.
+    // Cockpit view west over the city toward the harbour and sunset sea,
+    // instruments lit against the dusk.
     state.missionKind = 'cargo';
     state.cockpitView = true;
-    Object.assign(a, { x: 700, y: 175, z: 320, heading: 1.15, pitch: -0.09, roll: 0.08, speed: 55, throttle: 0.55, onGround: false, gearDown: false });
+    Object.assign(a, { x: 260, y: 170, z: 240, heading: -1.35, pitch: -0.3, roll: 0.06, speed: 55, throttle: 0.55, onGround: false, gearDown: false });
     state.missionTime = 63;
     state.score = 0;
   } else if (scene.shot === 'landing') {
-    // Final approach: runway centred ahead, gear down, gentle descent.
+    // Final approach: coastal runway centred ahead, beach and city to the
+    // left, gear down, gentle descent.
     state.missionKind = 'landing';
-    Object.assign(a, { x: -262, y: 52, z: 1400, heading: 0, pitch: -0.05, roll: 0.02, speed: 38, throttle: 0.3, onGround: false, gearDown: true });
+    Object.assign(a, { x: 260, y: 52, z: 1400, heading: 0, pitch: -0.05, roll: 0.02, speed: 38, throttle: 0.3, onGround: false, gearDown: true });
     state.missionTime = 88;
     state.score = 0;
   } else if (scene.shot === 'drop') {
-    // Cargo away: crate under its parachute above the drop zone.
+    // Cargo away over the harbour: crate under its parachute ahead of the
+    // aircraft, drop beacon and cranes below.
     state.missionKind = 'cargo';
-    Object.assign(a, { x: 880, y: 230, z: 160, heading: 1.25, pitch: 0.01, roll: -0.1, speed: 48, throttle: 0.5, onGround: false, gearDown: false });
+    Object.assign(a, { x: 300, y: 260, z: 220, heading: -1.35, pitch: 0.01, roll: -0.1, speed: 48, throttle: 0.5, onGround: false, gearDown: false });
     state.mission.dropped = true;
-    state.mission.crate = { x: 955, y: 218, z: 105, vx: 6, vy: -7, vz: -4 };
+    state.mission.crate = { x: 180, y: 245, z: 190, vx: -5, vy: -7, vz: -2 };
     state.mission.bannerText = 'Crate away — watch it fall';
     state.missionTime = 52;
     state.score = 0;

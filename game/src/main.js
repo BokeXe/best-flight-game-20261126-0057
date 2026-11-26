@@ -1,11 +1,12 @@
 // main.js — Sunwing Courier: boot, the game loop, title and results screens,
-// and the render order that ties terrain, aircraft, missions and HUD together.
+// and the render order that ties the sunset coast, aircraft, missions and
+// HUD together.
 
-import { buildIslandHeightfield, buildTownBuildings, buildCloudField, terrainHeightAt } from './terrain.js';
+import { buildCoastalHeightfield, buildCityBuildings, buildCloudField, terrainHeightAt } from './terrain.js';
 import { createAircraftState, stepFlightModel, refuelIfParked } from './flight-model.js';
 import { createChaseCamera, updateChaseCamera, buildViewMatrix } from './camera.js';
 import {
-  drawSky, drawSea, drawTerrainMesh, drawRunway, drawTownAndLighthouse,
+  drawSky, drawSea, drawTerrainMesh, drawRunway, drawCityAndHarbor,
   drawClouds, drawMissionRings, drawCargoTarget, drawFallingCrate, drawAircraftShadow,
 } from './renderer.js';
 import { drawChaseAircraft, drawCockpitPanel } from './aircraft.js';
@@ -25,11 +26,11 @@ attachInputListeners(input, canvas);
 canvas.addEventListener('click', () => audio.start());
 
 function createGameState(seed) {
-  const heights = buildIslandHeightfield(seed);
+  const heights = buildCoastalHeightfield(seed);
   return {
     seed,
     heights,
-    buildings: buildTownBuildings(seed),
+    buildings: buildCityBuildings(seed),
     clouds: buildCloudField(seed),
     aircraft: createAircraftState(missionSpawn('rings')),
     camera: createChaseCamera(),
@@ -108,7 +109,7 @@ function renderGame() {
   drawSea(ctx, width, height, view, state.time);
   drawTerrainMesh(ctx, view, state.heights, state.camera);
   drawRunway(ctx, view, state.heights);
-  drawTownAndLighthouse(ctx, view, state.heights, state.buildings, state.time);
+  drawCityAndHarbor(ctx, view, state.heights, state.buildings, state.time);
   if (state.missionKind === 'rings') {
     drawMissionRings(ctx, view, state.mission.rings, state.mission.ringIndex, state.time);
   }
@@ -141,19 +142,23 @@ function drawFlashText(width, height) {
 }
 
 function drawTitleScreen(width, height) {
-  ctx.fillStyle = 'rgba(8,18,32,0.62)';
+  const shade = ctx.createLinearGradient(0, 0, 0, height);
+  shade.addColorStop(0, 'rgba(24,16,44,0.66)');
+  shade.addColorStop(0.55, 'rgba(58,26,48,0.58)');
+  shade.addColorStop(1, 'rgba(20,12,30,0.72)');
+  ctx.fillStyle = shade;
   ctx.fillRect(0, 0, width, height);
   ctx.textAlign = 'center';
-  ctx.fillStyle = '#ffd34d';
+  ctx.fillStyle = '#ffb347';
   ctx.font = 'bold 64px sans-serif';
   ctx.fillText('SUNWING COURIER', width / 2, height * 0.2);
-  ctx.fillStyle = '#eaf3fb';
+  ctx.fillStyle = '#fff4e0';
   ctx.font = '22px sans-serif';
-  ctx.fillText('Island flight missions over Kestrel Bay', width / 2, height * 0.2 + 40);
+  ctx.fillText('Golden-hour courier flights over Solmere Coast', width / 2, height * 0.2 + 40);
   const lines = [
-    '1  RING COURSE · EASY — thread 8 rings, clean speed earns +150',
-    '2  CARGO DROP · MEDIUM — lead the beacon, mind the sea breeze',
-    '3  PRECISION LANDING · HARD — grease it on the touchdown mark',
+    '1  RING COURSE · EASY — thread 8 rings over the skyline at sunset',
+    '2  CARGO DROP · MEDIUM — deliver to the harbour beacon, mind the breeze',
+    '3  PRECISION LANDING · HARD — grease it on the coastal touchdown mark',
     '',
     'W/S or wheel throttle · arrows or mouse steer · A/D rudder',
     'Space brake · F flaps · B drop cargo · C camera · P pause · R restart',
@@ -162,7 +167,7 @@ function drawTitleScreen(width, height) {
   ];
   ctx.font = '20px sans-serif';
   lines.forEach((line, i) => ctx.fillText(line, width / 2, height * 0.36 + i * 34));
-  ctx.fillStyle = '#ffd34d';
+  ctx.fillStyle = '#ffb347';
   ctx.font = 'bold 24px sans-serif';
   ctx.fillText('Press 1, 2 or 3 to fly', width / 2, height * 0.36 + lines.length * 34 + 26);
 }
@@ -199,8 +204,8 @@ function drawResultsScreen(width, height) {
 const scene = shotSceneFromUrl(window.location.search);
 if (scene) {
   state.seed = scene.seed;
-  state.heights = buildIslandHeightfield(scene.seed);
-  state.buildings = buildTownBuildings(scene.seed);
+  state.heights = buildCoastalHeightfield(scene.seed);
+  state.buildings = buildCityBuildings(scene.seed);
   state.clouds = buildCloudField(scene.seed);
   state.mission = createMission(scene.shot === 'cover' ? 'rings' : scene.shot === 'landing' ? 'landing' : 'cargo', state.heights);
   applyShotScene(state, scene);

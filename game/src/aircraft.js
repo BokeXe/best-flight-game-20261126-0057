@@ -11,12 +11,12 @@ export function drawChaseAircraft(ctx, width, height, aircraft, time) {
   ctx.scale(scale, scale);
 
   const wingSpan = 330, wingY = 6;
-  // Main wing: sunlit top surface falling to shaded tips, red tip caps,
-  // aileron hinge lines and a soft leading-edge highlight.
+  // Main wing: sunset-warm top surface falling to dusk-shaded tips, red
+  // tip caps, aileron hinge lines and a golden leading-edge highlight.
   const wingGrad = ctx.createLinearGradient(-wingSpan / 2, 0, wingSpan / 2, 0);
-  wingGrad.addColorStop(0, '#b9c9da');
-  wingGrad.addColorStop(0.5, '#f2f6fa');
-  wingGrad.addColorStop(1, '#aebfd2');
+  wingGrad.addColorStop(0, '#e8c9a8');
+  wingGrad.addColorStop(0.5, '#fdf3e2');
+  wingGrad.addColorStop(1, '#b8a8b8');
   ctx.fillStyle = wingGrad;
   ctx.beginPath();
   ctx.moveTo(-wingSpan / 2, wingY + 16);
@@ -45,7 +45,7 @@ export function drawChaseAircraft(ctx, width, height, aircraft, time) {
     ctx.moveTo(side * 46, wingY + 15); ctx.lineTo(side * (wingSpan / 2 - 34), wingY + 21);
     ctx.stroke();
   }
-  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  ctx.fillStyle = 'rgba(255,214,140,0.65)';
   ctx.fillRect(-wingSpan / 2 + 34, wingY + 2, wingSpan - 68, 2.4);
 
   // Tailplane and fin, shaded like the wing, with a courier sun mark.
@@ -68,11 +68,11 @@ export function drawChaseAircraft(ctx, width, height, aircraft, time) {
   // Fuselage: cylindrical shading (dark flanks, bright spine), panel seams,
   // spine stripe and a glass canopy with a sky reflection streak.
   const body = ctx.createLinearGradient(-36, 0, 36, 0);
-  body.addColorStop(0, '#9fb2c6');
-  body.addColorStop(0.3, '#dbe5ef');
-  body.addColorStop(0.5, '#fbfdff');
-  body.addColorStop(0.72, '#d3dfee');
-  body.addColorStop(1, '#93a8bd');
+  body.addColorStop(0, '#c9a98c');
+  body.addColorStop(0.3, '#f0e2cc');
+  body.addColorStop(0.5, '#fffaf0');
+  body.addColorStop(0.72, '#e2d2c2');
+  body.addColorStop(1, '#a898a8');
   ctx.fillStyle = body;
   ctx.beginPath();
   ctx.moveTo(-26, 64);
@@ -165,8 +165,8 @@ export function drawCockpitPanel(ctx, width, height, aircraft, instruments) {
   ctx.beginPath(); ctx.ellipse(width / 2, panelTop - 6, width * 0.16, 14, 0, Math.PI, 0); ctx.fill();
   ctx.fillStyle = '#d23b2e';
   ctx.beginPath(); ctx.ellipse(width / 2, panelTop - 8, 16, 10, 0, 0, Math.PI * 2); ctx.fill();
-  // Glareshield and panel body.
-  ctx.fillStyle = '#16222f';
+  // Glareshield and panel body in deep dusk plum.
+  ctx.fillStyle = '#1d1628';
   ctx.beginPath();
   ctx.moveTo(0, height); ctx.lineTo(0, panelTop + 26);
   ctx.quadraticCurveTo(width / 2, panelTop - 22, width, panelTop + 26);

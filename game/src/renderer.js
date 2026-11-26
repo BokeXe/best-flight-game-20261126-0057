@@ -1,23 +1,27 @@
-// renderer.js — paints Kestrel Bay: sky, sea, the island mesh, runway, town,
-// lighthouse, clouds and the mission rings, all through one projection.
+// renderer.js — paints Solmere Coast at sunset: dusk sky, glittering sea,
+// the coastal mesh, lit skyline, harbour, runway and mission rings, all
+// through one projection.
 
 import { projectPoint } from './camera.js';
 import {
-  WORLD_SIZE, GRID_CELLS, CELL_METRES, RUNWAY, LIGHTHOUSE,
-  terrainHeightAt, groundColour,
+  WORLD_SIZE, GRID_CELLS, CELL_METRES, RUNWAY, LIGHTHOUSE, HARBOR, SUNSET,
+  CITY_CENTRE, shorelineX, terrainHeightAt, groundColour,
 } from './terrain.js';
 
 export function drawSky(ctx, width, height, view) {
   const horizon = height * 0.52 - view.cam.pitch * height * 0.55;
+  const horizonStop = Math.max(0.42, Math.min(0.94, horizon / height));
   const grad = ctx.createLinearGradient(0, 0, 0, height);
-  grad.addColorStop(0, '#2563b8');
-  grad.addColorStop(0.34, '#4f93d8');
-  grad.addColorStop(Math.max(0.4, Math.min(0.92, horizon / height)), '#b7dcf4');
-  grad.addColorStop(1, '#e8f3fb');
+  grad.addColorStop(0, '#1c2c58'); // dusk blue overhead
+  grad.addColorStop(0.3, '#4b3568'); // violet band
+  grad.addColorStop(Math.max(0.36, horizonStop - 0.16), '#b6506e'); // rose
+  grad.addColorStop(horizonStop, '#ff8a3d'); // deep orange at the waterline
+  grad.addColorStop(Math.min(1, horizonStop + 0.08), '#ffd27a'); // gold seam
+  grad.addColorStop(1, '#7a4a52');
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, width, height);
-  // Thin cirrus streaks high above the island.
-  ctx.fillStyle = 'rgba(255,255,255,0.20)';
+  // High cirrus catches the last light in pink streaks.
+  ctx.fillStyle = 'rgba(255,178,150,0.20)';
   for (let i = 0; i < 7; i++) {
     const cy = height * (0.05 + i * 0.045) + Math.sin(view.cam.heading * 2 + i * 1.7) * 6;
     const cx = ((i * 271) % Math.max(1, width)) + Math.cos(view.cam.heading + i) * 30;
@@ -25,25 +29,29 @@ export function drawSky(ctx, width, height, view) {
     ctx.ellipse(cx, cy, width * (0.16 + (i % 3) * 0.05), 5 + (i % 3) * 2, -0.04, 0, Math.PI * 2);
     ctx.fill();
   }
-  // Morning sun, fixed in the east: bright disc inside a wide warm glow.
-  const sun = projectPoint(view, view.cam.x + 4000, 1500, view.cam.z - 2600);
+  // Low sun over the western sea: a large disc inside layered warm glow.
+  const sun = projectPoint(view, view.cam.x + SUNSET.x, view.cam.y + SUNSET.y, view.cam.z + SUNSET.z);
   if (sun) {
-    const glow = ctx.createRadialGradient(sun.x, sun.y, 4, sun.x, sun.y, 210);
-    glow.addColorStop(0, 'rgba(255,250,214,0.98)');
-    glow.addColorStop(0.12, 'rgba(255,238,170,0.75)');
-    glow.addColorStop(0.45, 'rgba(255,226,140,0.28)');
-    glow.addColorStop(1, 'rgba(255,226,140,0)');
+    const glow = ctx.createRadialGradient(sun.x, sun.y, 6, sun.x, sun.y, 330);
+    glow.addColorStop(0, 'rgba(255,244,190,0.98)');
+    glow.addColorStop(0.1, 'rgba(255,196,96,0.82)');
+    glow.addColorStop(0.38, 'rgba(255,128,58,0.34)');
+    glow.addColorStop(1, 'rgba(255,128,58,0)');
     ctx.fillStyle = glow;
-    ctx.fillRect(sun.x - 220, sun.y - 220, 440, 440);
-    ctx.fillStyle = '#fffbe8';
-    ctx.beginPath(); ctx.arc(sun.x, sun.y, 17, 0, Math.PI * 2); ctx.fill();
+    ctx.fillRect(sun.x - 340, sun.y - 340, 680, 680);
+    const disc = ctx.createRadialGradient(sun.x, sun.y, 2, sun.x, sun.y, 34);
+    disc.addColorStop(0, '#fff7d6');
+    disc.addColorStop(0.72, '#ffd98a');
+    disc.addColorStop(1, '#ff9e4f');
+    ctx.fillStyle = disc;
+    ctx.beginPath(); ctx.arc(sun.x, sun.y, 30, 0, Math.PI * 2); ctx.fill();
   }
-  // Distant haze hugs the horizon so far terrain melts into the sky.
+  // Warm haze hugs the horizon so the far coast melts into the sunset.
   const hazeTop = Math.max(0, horizon - height * 0.1);
   const haze = ctx.createLinearGradient(0, hazeTop, 0, Math.min(height, horizon + height * 0.16));
-  haze.addColorStop(0, 'rgba(226,240,250,0)');
-  haze.addColorStop(0.55, 'rgba(226,240,250,0.5)');
-  haze.addColorStop(1, 'rgba(226,240,250,0)');
+  haze.addColorStop(0, 'rgba(255,170,110,0)');
+  haze.addColorStop(0.55, 'rgba(255,170,110,0.42)');
+  haze.addColorStop(1, 'rgba(255,170,110,0)');
   ctx.fillStyle = haze;
   ctx.fillRect(0, hazeTop, width, Math.min(height, horizon + height * 0.16) - hazeTop);
 }
@@ -54,32 +62,48 @@ export function drawSea(ctx, width, height, view, time) {
     [WORLD_SIZE, WORLD_SIZE], [-WORLD_SIZE, WORLD_SIZE],
   ].map(([x, z]) => projectPoint(view, x, 0, z));
   if (corners.some((p) => !p)) return;
-  // Sea shading: pale turquoise at the horizon deepening toward the viewer.
+  // Sea shading: violet-blue water warming toward the sunset horizon.
   const seaGrad = ctx.createLinearGradient(0, height * 0.4, 0, height);
-  seaGrad.addColorStop(0, '#5aa7cf');
-  seaGrad.addColorStop(0.45, '#2b82b8');
-  seaGrad.addColorStop(1, '#155d8f');
+  seaGrad.addColorStop(0, '#7a5a7d');
+  seaGrad.addColorStop(0.35, '#3d5a86');
+  seaGrad.addColorStop(0.72, '#274a73');
+  seaGrad.addColorStop(1, '#17365c');
   ctx.fillStyle = seaGrad;
   ctx.beginPath();
   corners.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
   ctx.closePath();
   ctx.fill();
-  // Sun glitter: short bright dashes scattered on the water.
-  ctx.strokeStyle = 'rgba(190,230,255,0.5)';
-  ctx.lineWidth = 2;
-  for (let i = 0; i < 40; i++) {
+  // Sun glitter path: bright dashes gather in a widening lane under the sun.
+  const sun = projectPoint(view, view.cam.x + SUNSET.x, 2, view.cam.z + SUNSET.z);
+  ctx.lineCap = 'round';
+  for (let i = 0; i < 90; i++) {
+    const t = i / 90;
+    const jitter = Math.sin(i * 127.1) * 43758.5453;
+    const spread = 26 + t * 210;
+    const gx = sun ? sun.x + ((jitter - Math.floor(jitter)) - 0.5) * spread * 2 : (i * 173) % width;
+    const gy = height * 0.5 + t * height * 0.48 + Math.sin(time * 1.7 + i * 2.3) * 2;
+    if (gy < 0 || gy > height) continue;
+    const w = 5 + t * 22 + Math.sin(time * 2.4 + i) * 2.5;
+    ctx.strokeStyle = `rgba(255,${190 + Math.floor(t * 40)},110,${0.34 + t * 0.4})`;
+    ctx.lineWidth = 1.4 + t * 1.8;
+    ctx.beginPath(); ctx.moveTo(gx - w, gy); ctx.lineTo(gx + w, gy); ctx.stroke();
+  }
+  // Sparse cool sparkle away from the glitter lane keeps the water alive.
+  ctx.strokeStyle = 'rgba(190,215,255,0.28)';
+  ctx.lineWidth = 1.4;
+  for (let i = 0; i < 26; i++) {
     const gx = view.cam.x + ((i * 613) % 1600) - 800;
     const gz = view.cam.z + ((i * 389) % 1600) - 800;
     const p = projectPoint(view, gx, 0.4, gz);
     if (!p || p.x < 0 || p.x > width || p.y < 0 || p.y > height) continue;
-    const w = 6 + (i % 5) * 3 + Math.sin(time * 2 + i) * 2;
+    const w = 5 + (i % 5) * 2.5;
     ctx.beginPath(); ctx.moveTo(p.x - w, p.y); ctx.lineTo(p.x + w, p.y); ctx.stroke();
   }
 }
 
 export function drawTerrainMesh(ctx, view, heights, camera) {
   const quads = [];
-  const step = 1; // full grid resolution keeps the island's shape readable
+  const step = 1; // full grid resolution keeps the coastline readable
   const radius = 1900;
   const minGX = Math.max(0, Math.floor((camera.x - radius + WORLD_SIZE / 2) / CELL_METRES / step));
   const maxGX = Math.min(GRID_CELLS / step - 1, Math.ceil((camera.x + radius + WORLD_SIZE / 2) / CELL_METRES / step));
@@ -102,16 +126,19 @@ export function drawTerrainMesh(ctx, view, heights, camera) {
       const avgH = (a.y + b.y + c.y + d.y) / 4;
       if (avgH < 0.4 && depth > 500) continue; // the sea plane covers deep water
       const slope = Math.abs(a.y - c.y) / (step * CELL_METRES);
-      // Face lighting from the height gradient against a fixed morning sun,
-      // a patchwork tint from coarse field blocks, and distance haze: the
-      // three together dissolve the grid into lit, varied ground.
+      // Face lighting against the low western sun: west-facing slopes catch
+      // the last light, east-facing ones fall into mauve shadow. A coarse
+      // block tint and warm distance haze dissolve the grid into dusk ground.
       const gradX = (b.y - a.y + c.y - d.y) / (2 * step * CELL_METRES);
       const gradZ = (d.y - a.y + c.y - b.y) / (2 * step * CELL_METRES);
-      const light = 1 - gradX * 0.55 + gradZ * 0.3;
+      const light = 0.88 + gradX * 0.68 + gradZ * 0.24;
       const blockHash = Math.sin(Math.floor(gx / 6) * 127.1 + Math.floor(gz / 6) * 311.7) * 43758.5453;
       const patch = blockHash - Math.floor(blockHash);
-      const hazeAmt = Math.max(0, Math.min(0.55, (depth - 900) / 2600));
-      quads.push({ pa, pb, pc, pd, depth, colour: groundColour(avgH, slope, patch, light), avgH, hazeAmt });
+      const midX = (a.x + c.x) / 2, midZ = (a.z + c.z) / 2;
+      const cityDist = Math.hypot((midX - CITY_CENTRE.x) / 620, (midZ - CITY_CENTRE.z) / 900);
+      const urban = Math.max(0, Math.min(1, 1.15 - cityDist));
+      const hazeAmt = Math.max(0, Math.min(0.5, (depth - 900) / 2600));
+      quads.push({ pa, pb, pc, pd, depth, colour: groundColour(avgH, slope, patch, light, urban), avgH, hazeAmt });
     }
   }
   quads.sort((q1, q2) => q2.depth - q1.depth);
@@ -126,37 +153,55 @@ export function drawTerrainMesh(ctx, view, heights, camera) {
     ctx.lineWidth = 1;
     ctx.stroke();
     if (q.hazeAmt > 0.02) {
-      ctx.fillStyle = `rgba(214,233,247,${q.hazeAmt.toFixed(3)})`;
+      ctx.fillStyle = `rgba(255,166,108,${q.hazeAmt.toFixed(3)})`;
       ctx.fill();
     }
   }
-  drawIslandRoads(ctx, view, heights);
+  drawCityStreets(ctx, view, heights);
 }
 
-// Two roads tie the island together: harbour town to the runway, and a
-// shore track from the town up to the lighthouse point.
-function drawIslandRoads(ctx, view, heights) {
-  const routes = [
-    [[1180, -180], [760, 180], [260, 520], [-160, 760], [-260, 900]],
-    [[1180, -180], [980, -620], [700, -1040], [420, -1500]],
-  ];
+// The city's street grid: avenues parallel to the shore, cross streets,
+// a beach promenade with a foam line, and streetlights coming on at dusk.
+function drawCityStreets(ctx, view, heights) {
   ctx.lineCap = 'round';
-  for (const route of routes) {
-    for (let i = 0; i < route.length - 1; i++) {
-      const [x0, z0] = route[i], [x1, z1] = route[i + 1];
-      const steps = 14;
-      let prev = null;
-      for (let s = 0; s <= steps; s++) {
-        const x = x0 + (x1 - x0) * (s / steps);
-        const z = z0 + (z1 - z0) * (s / steps);
-        const p = projectPoint(view, x, terrainHeightAt(heights, x, z) + 0.5, z);
-        if (p && prev) {
-          ctx.strokeStyle = 'rgba(112,102,92,0.85)';
-          ctx.lineWidth = Math.max(1, p.scale * 5);
-          ctx.beginPath(); ctx.moveTo(prev.x, prev.y); ctx.lineTo(p.x, p.y); ctx.stroke();
-        }
-        prev = p;
+  const drawRoute = (points, colour, metres) => {
+    let prev = null;
+    for (const [x, z] of points) {
+      const p = projectPoint(view, x, terrainHeightAt(heights, x, z) + 0.6, z);
+      if (p && prev) {
+        ctx.strokeStyle = colour;
+        ctx.lineWidth = Math.max(1, p.scale * metres);
+        ctx.beginPath(); ctx.moveTo(prev.x, prev.y); ctx.lineTo(p.x, p.y); ctx.stroke();
       }
+      prev = p;
+    }
+  };
+  // Avenues and cross streets read as dark ribbons on the urban shelf.
+  for (const avenueX of [-190, -70, 55, 180, 305, 430]) {
+    drawRoute([[avenueX, -1080], [avenueX, 720]], 'rgba(43,40,52,0.9)', 7);
+  }
+  for (let z = -1035; z <= 675; z += 92) {
+    drawRoute([[-260, z], [500, z]], 'rgba(43,40,52,0.82)', 5.5);
+  }
+  // Coast road to the runway and the headland track to the lighthouse.
+  drawRoute([[430, 420], [360, 620], [RUNWAY.x, 900]], 'rgba(52,46,54,0.9)', 7);
+  drawRoute([[-70, -980], [-210, -1240], [LIGHTHOUSE.x, LIGHTHOUSE.z]], 'rgba(52,46,54,0.85)', 5);
+  // Beach promenade follows the shoreline; a pale foam line edges the water.
+  const promenade = [], foam = [];
+  for (let z = -1250; z <= 950; z += 90) {
+    promenade.push([shorelineX(z) + 55, z]);
+    foam.push([shorelineX(z) + 6, z]);
+  }
+  drawRoute(promenade, 'rgba(232,196,150,0.95)', 6);
+  drawRoute(foam, 'rgba(255,240,220,0.75)', 2.5);
+  // Streetlights: warm points along the avenues, denser downtown.
+  for (const avenueX of [-190, -70, 55, 180, 305, 430]) {
+    for (let z = -1040; z <= 680; z += 64) {
+      const p = projectPoint(view, avenueX + 6, terrainHeightAt(heights, avenueX, z) + 3, z);
+      if (!p || p.depth > 2400) continue;
+      const r = Math.max(1.1, p.scale * 1.5);
+      ctx.fillStyle = 'rgba(255,196,96,0.9)';
+      ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill();
     }
   }
 }
@@ -198,6 +243,26 @@ export function drawRunway(ctx, view, heights) {
       if (p) ctx.fillRect(p.x - Math.max(1.5, p.scale * 1.4), p.y - 2, Math.max(3, p.scale * 2.8), 4);
     }
   }
+  // Approach light bars south of the threshold guide the final at dusk.
+  for (let i = 1; i <= 4; i++) {
+    const p = projectPoint(view, RUNWAY.x, y + 0.7, RUNWAY.z1 + i * 55);
+    if (!p) continue;
+    const w = Math.max(4, p.scale * (10 + i * 2));
+    ctx.strokeStyle = 'rgba(255,224,130,0.9)';
+    ctx.lineWidth = Math.max(1.5, p.scale * 1.4);
+    ctx.beginPath(); ctx.moveTo(p.x - w / 2, p.y); ctx.lineTo(p.x + w / 2, p.y); ctx.stroke();
+  }
+  // A small lit terminal and apron east of the strip make it an airport.
+  const term = projectPoint(view, RUNWAY.x + 95, y + 16, (RUNWAY.z0 + RUNWAY.z1) / 2);
+  if (term) {
+    const tw = Math.max(8, term.scale * 62), th = Math.max(4, term.scale * 16);
+    ctx.fillStyle = '#3a3049';
+    ctx.fillRect(term.x - tw / 2, term.y, tw, th);
+    ctx.fillStyle = '#241c33';
+    ctx.fillRect(term.x - tw / 2 - 2, term.y - 3, tw + 4, 4);
+    ctx.fillStyle = 'rgba(255,214,130,0.95)';
+    for (let i = 0; i < 6; i++) ctx.fillRect(term.x - tw / 2 + 4 + i * (tw / 6), term.y + th * 0.35, Math.max(2, tw / 14), Math.max(2, th * 0.3));
+  }
   // Edge lights glow along both sides so the strip reads at a glance.
   for (let z = RUNWAY.z0 + 20; z <= RUNWAY.z1 - 20; z += 56) {
     for (const side of [-1, 1]) {
@@ -215,58 +280,70 @@ export function drawRunway(ctx, view, heights) {
   }
 }
 
-export function drawTownAndLighthouse(ctx, view, heights, buildings, time) {
+export function drawCityAndHarbor(ctx, view, heights, buildings, time) {
   const drawn = [];
   for (const b of buildings) {
     const baseY = terrainHeightAt(heights, b.x, b.z);
     const p = projectPoint(view, b.x, baseY + b.height, b.z);
-    if (!p || p.depth > 2600) continue;
+    if (!p || p.depth > 2800) continue;
     drawn.push({ b, p, baseY });
   }
   drawn.sort((d1, d2) => d2.p.depth - d1.p.depth);
-  for (const { b, p, baseY } of drawn) {
-    const w = Math.max(2, b.width * p.scale * 0.55);
+  for (const { b, p } of drawn) {
+    const w = Math.max(2, b.width * p.scale * 0.58);
     const h = Math.max(2, b.height * p.scale);
     const depthPx = Math.max(1.5, b.depth * p.scale * 0.3);
-    const light = 50 + (b.litSeed % 9);
-    // Sunlit front wall, shaded side wall: each house reads as a solid box.
-    ctx.fillStyle = `hsl(${b.hue}, 36%, ${light}%)`;
+    // Long dusk shadow thrown east from the base, then the lit west face
+    // and the blue-shadow east face: every block reads as a solid volume.
+    ctx.fillStyle = 'rgba(24,20,44,0.28)';
+    ctx.beginPath();
+    ctx.moveTo(p.x - w / 2, p.y + h);
+    ctx.lineTo(p.x + w / 2 + depthPx + h * 0.34, p.y + h + depthPx * 0.18);
+    ctx.lineTo(p.x + w / 2 + depthPx + h * 0.34, p.y + h + depthPx * 0.18 + 3);
+    ctx.lineTo(p.x - w / 2, p.y + h + 3);
+    ctx.closePath(); ctx.fill();
+    const westLight = 46 + (b.litSeed % 10);
+    ctx.fillStyle = `hsl(${b.hue}, 44%, ${westLight}%)`;
     ctx.fillRect(p.x - w / 2, p.y, w, h);
-    ctx.fillStyle = `hsl(${b.hue}, 30%, ${light - 13}%)`;
+    ctx.fillStyle = `hsl(232, 26%, ${26 + (b.litSeed % 7)}%)`;
     ctx.beginPath();
     ctx.moveTo(p.x + w / 2, p.y); ctx.lineTo(p.x + w / 2 + depthPx, p.y - depthPx * 0.5);
     ctx.lineTo(p.x + w / 2 + depthPx, p.y + h - depthPx * 0.5); ctx.lineTo(p.x + w / 2, p.y + h);
     ctx.closePath(); ctx.fill();
-    // Roof: gabled prism in its own clay tone, or a flat slab.
-    ctx.fillStyle = `hsl(${b.roofHue}, 42%, ${34 + (b.litSeed % 6)}%)`;
+    // Flat dusk roof slab; towers carry a mast and a red beacon.
+    ctx.fillStyle = `hsl(${b.roofHue}, 24%, ${20 + (b.litSeed % 5)}%)`;
     ctx.beginPath();
-    if (b.gabled) {
-      ctx.moveTo(p.x - w / 2 - 1.5, p.y); ctx.lineTo(p.x, p.y - h * 0.24);
-      ctx.lineTo(p.x + w / 2 + depthPx + 1, p.y - depthPx * 0.5);
-      ctx.lineTo(p.x + depthPx * 0.4, p.y - h * 0.24 - depthPx * 0.5);
-    } else {
-      ctx.moveTo(p.x - w / 2 - 1, p.y); ctx.lineTo(p.x + w / 2 + depthPx, p.y - depthPx * 0.5);
-      ctx.lineTo(p.x + w / 2 + depthPx, p.y - depthPx * 0.5 + 2.5); ctx.lineTo(p.x - w / 2 - 1, p.y + 2.5);
-    }
+    ctx.moveTo(p.x - w / 2 - 1, p.y); ctx.lineTo(p.x + w / 2 + depthPx, p.y - depthPx * 0.5);
+    ctx.lineTo(p.x + w / 2 + depthPx, p.y - depthPx * 0.5 + 2.5); ctx.lineTo(p.x - w / 2 - 1, p.y + 2.5);
     ctx.closePath(); ctx.fill();
-    // Windows in a regular grid, some lit: the town looks lived-in.
-    const cols = Math.max(1, Math.floor(w / 7)), rows = Math.max(1, Math.floor(h / 9));
-    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
-      const litWin = (r * 11 + c * 5 + b.litSeed) % 3 !== 0;
-      ctx.fillStyle = litWin ? 'rgba(255,238,178,0.95)' : 'rgba(52,72,96,0.75)';
-      ctx.fillRect(p.x - w / 2 + 2 + c * 7, p.y + 3 + r * 9, 3, 4);
+    if (b.tower && w > 7) {
+      ctx.strokeStyle = 'rgba(230,238,250,0.75)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.moveTo(p.x + depthPx * 0.3, p.y - 2); ctx.lineTo(p.x + depthPx * 0.3, p.y - Math.max(6, h * 0.1)); ctx.stroke();
+      if (Math.sin(time * 2.2 + b.litSeed) > 0.1) {
+        ctx.fillStyle = '#ff5a4d';
+        ctx.beginPath(); ctx.arc(p.x + depthPx * 0.3, p.y - Math.max(6, h * 0.1), 1.8, 0, Math.PI * 2); ctx.fill();
+      }
     }
-    void baseY;
+    // Windows: dusk lights coming on, warm and uneven across the facade.
+    if (w > 6 && h > 8) {
+      const cols = Math.max(1, Math.floor(w / 6.5)), rows = Math.max(1, Math.floor(h / 8));
+      for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+        const litWin = (r * 13 + c * 7 + b.litSeed) % 5 !== 0;
+        ctx.fillStyle = litWin ? 'rgba(255,214,130,0.96)' : 'rgba(30,38,66,0.8)';
+        ctx.fillRect(p.x - w / 2 + 2 + c * 6.5, p.y + 3 + r * 8, 2.8, 3.8);
+      }
+    }
   }
-  drawHarbourBoats(ctx, view, time);
-  // Lighthouse: striped tower with a rotating beam.
+  drawHarbor(ctx, view, heights, time);
+  // Lighthouse on the north headland, beam sweeping the darkening sea.
   const lhBase = terrainHeightAt(heights, LIGHTHOUSE.x, LIGHTHOUSE.z);
   const top = projectPoint(view, LIGHTHOUSE.x, lhBase + 58, LIGHTHOUSE.z);
   const foot = projectPoint(view, LIGHTHOUSE.x, lhBase, LIGHTHOUSE.z);
   if (top && foot) {
     const w = Math.max(3, top.scale * 7);
     for (let i = 0; i < 5; i++) {
-      ctx.fillStyle = i % 2 ? '#e8eef2' : '#c0392b';
+      ctx.fillStyle = i % 2 ? '#f2e7dc' : '#c0392b';
       const y0 = foot.y - (foot.y - top.y) * (i / 5);
       const y1 = foot.y - (foot.y - top.y) * ((i + 1) / 5);
       ctx.fillRect(top.x - w / 2, y1, w, y0 - y1);
@@ -274,7 +351,7 @@ export function drawTownAndLighthouse(ctx, view, heights, buildings, time) {
     ctx.fillStyle = '#22303f';
     ctx.fillRect(top.x - w * 0.7, top.y - 6, w * 1.4, 7);
     const beamAngle = time * 0.7;
-    ctx.fillStyle = 'rgba(255,240,170,0.35)';
+    ctx.fillStyle = 'rgba(255,240,170,0.32)';
     ctx.beginPath();
     ctx.moveTo(top.x, top.y - 3);
     ctx.lineTo(top.x + Math.cos(beamAngle) * 220, top.y - 3 + Math.sin(beamAngle) * 40 - 14);
@@ -283,31 +360,43 @@ export function drawTownAndLighthouse(ctx, view, heights, buildings, time) {
   }
 }
 
-// A short pier and three fishing boats make the harbour read as a harbour.
-function drawHarbourBoats(ctx, view, time) {
-  const pierA = projectPoint(view, 1330, 2, -60);
-  const pierB = projectPoint(view, 1420, 2, 30);
+// Pier, cranes, breakwater and boats: the harbour the cargo mission serves.
+function drawHarbor(ctx, view, heights, time) {
+  const pierA = projectPoint(view, HARBOR.x + 90, 3, HARBOR.z - 40);
+  const pierB = projectPoint(view, HARBOR.x - 230, 3, HARBOR.z + 70);
   if (pierA && pierB) {
-    ctx.strokeStyle = '#6e5a44';
-    ctx.lineWidth = Math.max(2, pierA.scale * 6);
+    ctx.strokeStyle = '#4c4250';
+    ctx.lineWidth = Math.max(2, pierA.scale * 9);
     ctx.beginPath(); ctx.moveTo(pierA.x, pierA.y); ctx.lineTo(pierB.x, pierB.y); ctx.stroke();
   }
-  const boats = [[1400, 90, '#c0392b'], [1460, -20, '#2471a3'], [1360, 180, '#e8eef2']];
+  // Two harbour cranes silhouetted against the sunset.
+  for (const [cx, cz] of [[HARBOR.x - 40, HARBOR.z - 20], [HARBOR.x - 150, HARBOR.z + 40]]) {
+    const base = projectPoint(view, cx, terrainHeightAt(heights, cx, cz), cz);
+    const topP = projectPoint(view, cx, terrainHeightAt(heights, cx, cz) + 52, cz);
+    if (!base || !topP || base.depth > 2600) continue;
+    ctx.strokeStyle = '#2c2438';
+    ctx.lineWidth = Math.max(1.5, base.scale * 2.2);
+    ctx.beginPath();
+    ctx.moveTo(base.x - 6, base.y); ctx.lineTo(topP.x, topP.y); ctx.lineTo(base.x + 6, base.y);
+    ctx.moveTo(topP.x, topP.y); ctx.lineTo(topP.x - Math.max(12, base.scale * 26), topP.y + 4);
+    ctx.stroke();
+  }
+  const boats = [[-520, 90, '#c0392b'], [-560, 210, '#e8eef2'], [-470, 300, '#2471a3'], [-600, -40, '#e8eef2']];
   for (const [bx, bz, hull] of boats) {
     const p = projectPoint(view, bx, 1 + Math.sin(time * 1.3 + bx) * 0.4, bz);
-    if (!p || p.depth > 2400) continue;
-    const w = Math.max(3, p.scale * 14), h = Math.max(2, p.scale * 4);
+    if (!p || p.depth > 2600) continue;
+    const w = Math.max(3, p.scale * 16), h = Math.max(2, p.scale * 4.5);
     ctx.fillStyle = hull;
     ctx.beginPath();
     ctx.moveTo(p.x - w / 2, p.y); ctx.lineTo(p.x + w / 2, p.y);
     ctx.lineTo(p.x + w * 0.34, p.y + h); ctx.lineTo(p.x - w * 0.34, p.y + h);
     ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = 'rgba(240,246,250,0.9)';
+    ctx.strokeStyle = 'rgba(255,240,220,0.9)';
     ctx.lineWidth = Math.max(1, p.scale * 0.8);
-    ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x, p.y - h * 2.4); ctx.stroke();
-    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x, p.y - h * 2.6); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,244,226,0.94)';
     ctx.beginPath();
-    ctx.moveTo(p.x, p.y - h * 2.4); ctx.lineTo(p.x + w * 0.3, p.y - h * 0.3); ctx.lineTo(p.x, p.y - h * 0.3);
+    ctx.moveTo(p.x, p.y - h * 2.6); ctx.lineTo(p.x + w * 0.3, p.y - h * 0.3); ctx.lineTo(p.x, p.y - h * 0.3);
     ctx.closePath(); ctx.fill();
   }
 }
@@ -316,33 +405,34 @@ export function drawClouds(ctx, view, clouds) {
   const visible = [];
   for (const cloud of clouds) {
     const p = projectPoint(view, cloud.x, cloud.y, cloud.z);
-    if (p && p.depth < 4200) visible.push({ cloud, p });
+    // Clouds nearer than 650 m would swell into a wall across the frame.
+    if (p && p.depth > 650 && p.depth < 4200) visible.push({ cloud, p });
   }
   visible.sort((a, b) => b.p.depth - a.p.depth);
   for (const { cloud, p } of visible) {
-    const r = cloud.radius * p.scale;
+    const r = Math.min(240, cloud.radius * p.scale);
     if (r < 4) continue;
     const haze = Math.max(0, Math.min(0.5, (p.depth - 1600) / 4200));
-    // Layered puffs: shaded bellies first, sunlit crowns on top, each puff a
-    // soft radial gradient so the cloud has volume instead of a flat rim.
+    // Layered puffs at dusk: violet bellies first, rose-lit crowns on top,
+    // each puff a soft radial gradient so the cloud keeps its volume.
     for (let i = 0; i < cloud.puffs; i++) {
       const ox = (i - (cloud.puffs - 1) / 2) * r * 0.5;
       const oy = Math.sin(i * 2.1 + cloud.drift * 6) * r * 0.09;
       const pr = r * (0.5 + (i % 3) * 0.09);
       const belly = ctx.createRadialGradient(p.x + ox, p.y + oy + pr * 0.25, 1, p.x + ox, p.y + oy + pr * 0.25, pr);
-      belly.addColorStop(0, `rgba(198,216,234,${0.5 * cloud.tone})`);
-      belly.addColorStop(1, 'rgba(198,216,234,0)');
+      belly.addColorStop(0, `rgba(96,72,116,${0.55 * cloud.tone})`);
+      belly.addColorStop(1, 'rgba(96,72,116,0)');
       ctx.fillStyle = belly;
       ctx.beginPath(); ctx.ellipse(p.x + ox, p.y + oy + pr * 0.22, pr, pr * 0.5, 0, 0, Math.PI * 2); ctx.fill();
       const crown = ctx.createRadialGradient(p.x + ox - pr * 0.2, p.y + oy - pr * 0.2, 1, p.x + ox, p.y + oy, pr);
-      crown.addColorStop(0, `rgba(255,255,255,${0.95 * cloud.tone})`);
-      crown.addColorStop(0.65, `rgba(248,251,254,${0.8 * cloud.tone})`);
-      crown.addColorStop(1, 'rgba(248,251,254,0)');
+      crown.addColorStop(0, `rgba(255,196,160,${0.92 * cloud.tone})`);
+      crown.addColorStop(0.65, `rgba(240,150,140,${0.72 * cloud.tone})`);
+      crown.addColorStop(1, 'rgba(240,150,140,0)');
       ctx.fillStyle = crown;
       ctx.beginPath(); ctx.ellipse(p.x + ox, p.y + oy, pr, pr * 0.52, 0, 0, Math.PI * 2); ctx.fill();
     }
     if (haze > 0.03) {
-      ctx.fillStyle = `rgba(216,234,248,${haze.toFixed(3)})`;
+      ctx.fillStyle = `rgba(255,166,108,${haze.toFixed(3)})`;
       ctx.beginPath(); ctx.ellipse(p.x, p.y, r * 1.15, r * 0.42, 0, 0, Math.PI * 2); ctx.fill();
     }
   }

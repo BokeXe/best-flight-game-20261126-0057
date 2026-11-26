@@ -1,7 +1,8 @@
-// missions.js — three sorties over Kestrel Bay: a ring course, a cargo drop
-// and a precision landing, each with its own goal, scoring and end state.
+// missions.js — three golden-hour sorties over Solmere Coast: a skyline
+// ring course, a harbour cargo drop and a precision landing at the coastal
+// runway, each with its own goal, scoring and end state.
 
-import { RUNWAY, TOWN_CENTRE, LIGHTHOUSE, terrainHeightAt } from './terrain.js';
+import { RUNWAY, HARBOR, LIGHTHOUSE, terrainHeightAt } from './terrain.js';
 
 export const MISSION_RINGS = 'rings';
 export const MISSION_CARGO = 'cargo';
@@ -14,9 +15,11 @@ export function createMission(kind, heights) {
 }
 
 function createRingMission(heights) {
+  // North from the coastal runway, across the skyline to the sunset sea,
+  // around the harbour headland and back over the lit avenues.
   const path = [
-    [-260, 260, 190], [-700, 60, 240], [-1050, -420, 300], [-620, -980, 260],
-    [60, -1280, 320], [640, -820, 240], [1050, -260, 200], [420, 420, 170],
+    [260, 430, 175], [-80, -260, 225], [-430, -560, 255], [-520, -940, 285],
+    [-140, -1160, 305], [260, -880, 265], [520, -380, 225], [390, 170, 185],
   ];
   const rings = path.map(([x, z, y]) => ({ x, y, z, radius: 46 }));
   return {
@@ -33,7 +36,7 @@ function createRingMission(heights) {
 }
 
 function createCargoMission(heights) {
-  const target = { x: TOWN_CENTRE.x - 160, z: TOWN_CENTRE.z + 240, radius: 90 };
+  const target = { x: HARBOR.x + 30, z: HARBOR.z + 10, radius: 90 };
   target.y = terrainHeightAt(heights, target.x, target.z);
   return {
     kind: MISSION_CARGO,
@@ -158,7 +161,7 @@ function updateLandingMission(mission, aircraft, state) {
     let points = onStrip ? Math.max(0, Math.round(700 - miss * 1.6)) + qualityBonus : 60;
     state.score += points;
     finishMission(mission, state, [
-      onStrip ? `Stopped ${Math.round(miss)} m from the touchdown mark` : 'Stopped off the runway — the meadow is not a runway',
+      onStrip ? `Stopped ${Math.round(miss)} m from the touchdown mark` : 'Stopped off the runway — the apron is not a runway',
       quality === 'greased' ? 'Greased it — touchdown bonus +200'
         : quality === 'firm' ? 'Firm arrival +80' : `Hard arrival — airframe damage ${Math.round(aircraft.damage)}%`,
     ]);
@@ -175,14 +178,17 @@ function finishMission(mission, state, lines) {
 
 export function missionSpawn(kind) {
   if (kind === MISSION_LANDING) {
-    // South of the strip, flying north (heading 0) down the runway line.
+    // South of the strip, flying north (heading 0) down the runway line,
+    // city and beach on the left, approach lights ahead.
     return { x: RUNWAY.x, y: 210, z: RUNWAY.z1 + 1500, heading: 0, speed: 52, throttle: 0.45, onGround: false };
   }
   if (kind === MISSION_CARGO) {
-    return { x: -900, y: 300, z: 500, heading: 1.1, speed: 58, throttle: 0.6, onGround: false };
+    // Inland east of the city, turning west toward the harbour beacon.
+    return { x: 760, y: 300, z: 560, heading: -1.15, speed: 58, throttle: 0.6, onGround: false };
   }
-  // Parked at the north threshold, lined up for a southbound takeoff roll.
-  return { x: RUNWAY.x, y: 16, z: RUNWAY.z0 + 60, heading: Math.PI, speed: 0, throttle: 0, onGround: true };
+  // Parked at the south threshold, lined up for a northbound takeoff roll
+  // toward the skyline and the sunset sea.
+  return { x: RUNWAY.x, y: 14, z: RUNWAY.z1 - 60, heading: 0, speed: 0, throttle: 0, onGround: true };
 }
 
 export function isOnRunway(aircraft) {

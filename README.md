@@ -4,14 +4,15 @@
 [![rank](https://make.fun/badge/best-flight-game-20261126-0057/BokeXe/best-flight-game-20261126-0057/rank.svg)](https://make.fun/bounty/best-flight-game-20261126-0057/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=best-flight-game-20261126-0057)
 [![reward](https://make.fun/badge/best-flight-game-20261126-0057/BokeXe/best-flight-game-20261126-0057/reward.svg)](https://make.fun/bounty/best-flight-game-20261126-0057?utm_source=github&utm_medium=readme&utm_campaign=best-flight-game-20261126-0057)
 
-**Sunwing Courier** — an original 3D chase-view flight game over the island
-of Kestrel Bay, built for make.fun's "Make the best flight game" bounty
-($500 in USDC, top 50).
+**Sunwing Courier** — an original 3D chase-view flight game over Solmere
+Coast, a coastal city at golden hour, built for make.fun's "Make the best
+flight game" bounty ($500 in USDC, top 50).
 
-Fly the Sunwing over a seeded island heightfield — coast, meadows, wooded
-ridges, a harbour town with lit windows and a lighthouse — through three
-missions: thread eight target rings in order, drop a cargo crate onto the
-town drop zone, or stop on the runway touchdown mark. The flight model
+Fly the Sunwing over a seeded coastal heightfield — sunset sea, beach
+promenade, a lit skyline with streetlights, a working harbour and a
+coastal runway — through three missions: thread eight target rings over
+the skyline in order, drop a cargo crate onto the harbour beacon, or stop
+on the runway touchdown mark. The flight model
 rewards throttle and turn discipline: speed-dependent control authority, a
 stall that drops the nose, fuel that burns with throttle (park on the
 runway to refuel and repair), and airframe damage from hard arrivals.
@@ -40,8 +41,8 @@ Chrome — no network requests, no build step.
 ## Layout
 
 - `game/src/flight-model.js` — throttle, stall, fuel and damage
-- `game/src/terrain.js` — the Kestrel Bay heightfield, town and clouds
-- `game/src/renderer.js` — sky, sea, terrain mesh, runway, rings
+- `game/src/terrain.js` — the Solmere Coast heightfield, skyline and clouds
+- `game/src/renderer.js` — sunset sky, sea, city mesh, harbour, runway, rings
 - `game/src/aircraft.js` — the Sunwing and its cockpit panel
 - `game/src/hud.js` — instruments, minimap, warnings
 - `game/src/missions.js` — ring course, cargo drop, precision landing
