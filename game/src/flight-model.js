@@ -17,6 +17,9 @@ export function createAircraftState(spawn) {
     fuel: FUEL_CAPACITY,
     damage: 0, // 0 pristine .. 100 wrecked
     stalled: false,
+    stallMargin: 99,
+    flapsDown: false,
+    lastTouchdown: null,
     onGround: spawn.onGround === true,
     crashed: false,
     gearDown: spawn.onGround === true,
@@ -25,40 +28,58 @@ export function createAircraftState(spawn) {
 
 export function stepFlightModel(state, controls, dt, groundHeight) {
   if (state.crashed) return state;
-  const authority = Math.min(1, Math.max(0.25, state.speed / 55));
+  // Control authority grows smoothly with airspeed: the plane answers at
+  // every speed, crisply when fast, gently near the stall.
+  const speedFrac = Math.min(1, state.speed / 60);
+  const authority = 0.38 + 0.62 * speedFrac * speedFrac * (3 - 2 * speedFrac);
   // Throttle spools toward the lever; an empty tank means no thrust at all.
+  // Burn rises steeply with power, so cruising gently stretches the sortie.
   const lever = state.fuel > 0 ? controls.throttle : 0;
-  state.throttle += (lever - state.throttle) * Math.min(1, dt * 2.2);
-  state.fuel = Math.max(0, state.fuel - state.throttle * dt * 0.55);
+  state.throttle += (lever - state.throttle) * Math.min(1, dt * 2.6);
+  state.fuel = Math.max(0, state.fuel - (0.04 + Math.pow(state.throttle, 1.6) * 0.62) * dt);
+  state.flapsDown = controls.flaps === true && state.speed < 58;
 
-  // Pitch and roll answer at every speed, but gently when slow.
-  state.pitch += controls.pitch * dt * 0.85 * authority;
+  // Pitch and roll track the stick with a short lag, then settle: no twitch,
+  // no wallow. Wings level themselves when the stick is centred.
+  state.pitch += controls.pitch * dt * 0.95 * authority;
   state.pitch = clamp(state.pitch, -0.62, 0.62);
-  state.roll += controls.roll * dt * 1.7 * authority;
+  if (Math.abs(controls.pitch) < 0.05) state.pitch -= state.pitch * dt * 0.5;
+  state.roll += controls.roll * dt * 1.9 * authority;
   state.roll = clamp(state.roll, -1.15, 1.15);
-  if (Math.abs(controls.roll) < 0.05) state.roll -= state.roll * dt * 1.4; // wings level themselves
+  if (Math.abs(controls.roll) < 0.05) state.roll -= state.roll * dt * 1.7;
 
-  // Banked lift turns the aircraft; rudder trims the nose.
+  // Banked lift turns the aircraft; rudder trims the nose. Hard turns cost
+  // energy: induced drag rises with bank, so steep turns bleed speed.
   const turnRate = Math.tan(state.roll) * 9.81 / Math.max(18, state.speed);
-  state.heading += (turnRate + controls.yaw * 0.35 * authority) * dt;
+  state.heading += (turnRate + controls.yaw * 0.38 * authority) * dt;
 
-  // Energy: thrust accelerates, drag and climbing bleed speed.
-  const thrust = state.throttle * 26;
-  const drag = 0.0038 * state.speed * state.speed + (controls.brake ? 9 : 0);
+  // Energy: thrust accelerates, drag and climbing bleed speed. A bent
+  // airframe makes less thrust, so damage is a reason to head home.
+  const thrust = state.throttle * 26 * (state.damage > 55 ? 0.82 : 1);
+  const induced = Math.abs(Math.tan(state.roll)) * state.speed * 0.05;
+  const drag = 0.0038 * state.speed * state.speed + induced
+    + (controls.brake ? 9 : 0) + (state.flapsDown ? 2.6 : 0);
   const gravityAlongPath = Math.sin(state.pitch) * 9.81;
   state.speed += (thrust - drag - gravityAlongPath) * dt;
   state.speed = clamp(state.speed, 0, MAX_SPEED);
 
-  // The stall: below flying speed the nose drops and lift fades.
-  state.stalled = state.speed < STALL_SPEED && !state.onGround;
+  // The stall: banked flight stalls faster (load factor), flaps buy margin.
+  // Below the effective stall speed the nose drops and lift fades.
+  const loadFactor = 1 / Math.max(0.45, Math.cos(state.roll));
+  const effectiveStall = STALL_SPEED * Math.sqrt(loadFactor) * (state.flapsDown ? 0.82 : 1);
+  state.stallMargin = state.speed - effectiveStall;
+  state.stalled = state.speed < effectiveStall && !state.onGround;
   let liftFactor = 1;
   if (state.stalled) {
     state.pitch = Math.max(state.pitch - dt * 0.7, -0.45);
-    liftFactor = Math.max(0.25, state.speed / STALL_SPEED);
+    liftFactor = Math.max(0.25, state.speed / effectiveStall);
   }
 
   const climb = Math.sin(state.pitch) * state.speed * liftFactor;
-  state.verticalSpeed = climb - (1 - liftFactor) * 14;
+  // Gentle deterministic gusts near the ground keep landings honest.
+  const gust = state.onGround ? 0
+    : Math.sin(state.x * 0.011 + state.z * 0.007) * Math.max(0, 1 - (state.y - groundHeight) / 160) * 1.1;
+  state.verticalSpeed = climb - (1 - liftFactor) * 14 + gust;
   state.x += Math.sin(state.heading) * Math.cos(state.pitch) * state.speed * dt;
   state.z += -Math.cos(state.heading) * Math.cos(state.pitch) * state.speed * dt;
   state.y += state.verticalSpeed * dt;
@@ -75,6 +96,10 @@ function resolveGroundContact(state, groundHeight, dt) {
   const sink = -state.verticalSpeed;
   const bank = Math.abs(state.roll);
   if (!state.onGround) {
+    // Grade every arrival so the pilot learns what a good one feels like.
+    const quality = sink <= 2.2 && bank < 0.18 ? 'greased'
+      : sink <= 5.5 && bank < 0.45 ? 'firm' : 'hard';
+    state.lastTouchdown = { sink, bank, speed: state.speed, quality };
     if (sink > 11 || bank > 0.75 || state.speed > 78) {
       state.crashed = true;
       state.damage = 100;

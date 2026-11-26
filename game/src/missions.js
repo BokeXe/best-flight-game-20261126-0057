@@ -25,7 +25,7 @@ function createRingMission(heights) {
     rings,
     ringIndex: 0,
     target: rings[0],
-    bannerTitle: 'MISSION: RING COURSE',
+    bannerTitle: 'MISSION: RING COURSE · EASY',
     bannerText: 'Fly through all 8 rings in order — smooth turns score best',
     finished: false,
     resultLines: [],
@@ -42,7 +42,7 @@ function createCargoMission(heights) {
     target,
     crate: null,
     dropped: false,
-    bannerTitle: 'MISSION: CARGO DROP',
+    bannerTitle: 'MISSION: CARGO DROP · MEDIUM',
     bannerText: 'Press B over the drop zone — lead the target, mind your speed',
     finished: false,
     resultLines: [],
@@ -57,7 +57,7 @@ function createLandingMission(heights) {
     title: 'PRECISION LANDING',
     rings: [],
     target: touchdown,
-    bannerTitle: 'MISSION: PRECISION LANDING',
+    bannerTitle: 'MISSION: PRECISION LANDING · HARD',
     bannerText: 'Touch down in the marked zone, gently, then stop on the runway',
     finished: false,
     resultLines: [],
@@ -76,24 +76,38 @@ function updateRingMission(mission, aircraft, state) {
   const ring = mission.rings[mission.ringIndex];
   if (!ring) return;
   const dist = Math.hypot(aircraft.x - ring.x, aircraft.y - ring.y, aircraft.z - ring.z);
+  // Live guidance: distance plus the speed band that earns the clean bonus.
+  const inBand = aircraft.speed > 34 && aircraft.speed < 76;
+  mission.bannerText = `Ring ${mission.ringIndex + 1} of 8 · ${Math.round(dist)} m · ${inBand ? 'clean speed — hold it' : aircraft.speed <= 34 ? 'too slow for clean bonus' : 'too fast for clean bonus'}`;
   if (dist < ring.radius) {
-    const clean = Math.abs(aircraft.roll) < 0.5 && aircraft.speed > 34 && aircraft.speed < 76;
+    const clean = Math.abs(aircraft.roll) < 0.5 && inBand;
     state.score += clean ? 150 : 100;
     state.flash = clean ? 'CLEAN RING +150' : 'RING +100';
     mission.ringIndex++;
     if (mission.ringIndex >= mission.rings.length) {
+      // Finish bonuses reward a quick, thrifty, unbent sortie.
+      const timeBonus = Math.max(0, Math.round(320 - state.missionTime * 2));
+      const fuelBonus = Math.round(aircraft.fuel * 2);
+      state.score += timeBonus + fuelBonus;
       finishMission(mission, state, [
         `All 8 rings flown in ${Math.round(state.missionTime)} seconds`,
-        `Fuel remaining ${Math.round(aircraft.fuel)}% · airframe ${Math.round(100 - aircraft.damage)}%`,
+        `Time bonus +${timeBonus} · fuel bonus +${fuelBonus} · airframe ${Math.round(100 - aircraft.damage)}%`,
       ]);
     } else {
       mission.target = mission.rings[mission.ringIndex];
-      mission.bannerText = `Ring ${mission.ringIndex + 1} of 8 — follow the arrow`;
     }
   }
 }
 
 function updateCargoMission(mission, aircraft, state, dt, heights) {
+  if (!mission.dropped) {
+    // Approach guidance: range, height above the zone, and a speed cue.
+    const range = Math.hypot(aircraft.x - mission.target.x, aircraft.z - mission.target.z);
+    const heightAbove = Math.round(aircraft.y - mission.target.y);
+    const cue = aircraft.speed > 58 ? 'slow down for the drop'
+      : range < 160 ? 'over the zone — press B' : 'line up on the beacon';
+    mission.bannerText = `Drop zone ${Math.round(range)} m · ${heightAbove} m up · ${cue}`;
+  }
   if (state.dropRequested && !mission.dropped) {
     mission.dropped = true;
     mission.crate = {
@@ -110,6 +124,7 @@ function updateCargoMission(mission, aircraft, state, dt, heights) {
   crate.vy -= 9.81 * dt;
   crate.vx *= 1 - dt * 0.55; // parachute drag
   crate.vz *= 1 - dt * 0.55;
+  crate.vx += 2.2 * dt; // a steady sea breeze pushes the crate east
   crate.vy = Math.max(crate.vy, -7);
   crate.x += crate.vx * dt;
   crate.y += crate.vy * dt;
@@ -128,16 +143,24 @@ function updateCargoMission(mission, aircraft, state, dt, heights) {
 }
 
 function updateLandingMission(mission, aircraft, state) {
+  if (!aircraft.onGround) {
+    // Approach guidance: range to the mark, sink rate, flap reminder.
+    const range = Math.hypot(aircraft.x - mission.target.x, aircraft.z - mission.target.z);
+    const sink = Math.round(-aircraft.verticalSpeed * 197);
+    const cue = aircraft.flapsDown ? 'flaps set — hold the glide' : 'press F for flaps';
+    mission.bannerText = `Touchdown mark ${Math.round(range)} m · sink ${sink} fpm · ${cue}`;
+  }
   if (aircraft.onGround && aircraft.speed < 3 && !mission.finished) {
     const miss = Math.hypot(aircraft.x - mission.target.x, aircraft.z - mission.target.z);
     const onStrip = Math.abs(aircraft.x - RUNWAY.x) < RUNWAY.width && aircraft.z > RUNWAY.z0 && aircraft.z < RUNWAY.z1;
-    const gentle = aircraft.damage < 12;
-    let points = onStrip ? Math.max(0, Math.round(700 - miss * 1.6)) : 60;
-    if (gentle && onStrip) points += 150;
+    const quality = aircraft.lastTouchdown?.quality ?? 'firm';
+    const qualityBonus = quality === 'greased' ? 200 : quality === 'firm' ? 80 : 0;
+    let points = onStrip ? Math.max(0, Math.round(700 - miss * 1.6)) + qualityBonus : 60;
     state.score += points;
     finishMission(mission, state, [
       onStrip ? `Stopped ${Math.round(miss)} m from the touchdown mark` : 'Stopped off the runway — the meadow is not a runway',
-      gentle ? 'Gentle arrival, airframe unmarked +150' : `Airframe damage ${Math.round(aircraft.damage)}%`,
+      quality === 'greased' ? 'Greased it — touchdown bonus +200'
+        : quality === 'firm' ? 'Firm arrival +80' : `Hard arrival — airframe damage ${Math.round(aircraft.damage)}%`,
     ]);
   }
 }

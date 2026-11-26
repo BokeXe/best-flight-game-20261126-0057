@@ -14,9 +14,10 @@ export function shotSceneFromUrl(search) {
 export function applyShotScene(state, scene) {
   const a = state.aircraft;
   if (scene.shot === 'cover') {
-    // Chase view over the bay: town and coast ahead, first ring in frame.
+    // Chase view closing on ring 2: the gate fills the centre of the frame,
+    // patchwork fields and the west ridge spread out below and ahead.
     state.missionKind = 'rings';
-    Object.assign(a, { x: -420, y: 250, z: 560, heading: -0.35, pitch: 0.02, roll: -0.22, speed: 62, throttle: 0.62, onGround: false, gearDown: false });
+    Object.assign(a, { x: -548, y: 246, z: 348, heading: -0.5, pitch: 0.02, roll: -0.2, speed: 62, throttle: 0.62, onGround: false, gearDown: false });
     state.missionTime = 41;
     state.score = 150;
     state.mission.ringIndex = 1;
@@ -32,7 +33,7 @@ export function applyShotScene(state, scene) {
   } else if (scene.shot === 'landing') {
     // Final approach: runway centred ahead, gear down, gentle descent.
     state.missionKind = 'landing';
-    Object.assign(a, { x: -262, y: 66, z: 1540, heading: 0, pitch: -0.05, roll: 0.02, speed: 38, throttle: 0.3, onGround: false, gearDown: true });
+    Object.assign(a, { x: -262, y: 52, z: 1400, heading: 0, pitch: -0.05, roll: 0.02, speed: 38, throttle: 0.3, onGround: false, gearDown: true });
     state.missionTime = 88;
     state.score = 0;
   } else if (scene.shot === 'drop') {
@@ -40,7 +41,7 @@ export function applyShotScene(state, scene) {
     state.missionKind = 'cargo';
     Object.assign(a, { x: 880, y: 230, z: 160, heading: 1.25, pitch: 0.01, roll: -0.1, speed: 48, throttle: 0.5, onGround: false, gearDown: false });
     state.mission.dropped = true;
-    state.mission.crate = { x: 985, y: 208, z: 82, vx: 6, vy: -7, vz: -4 };
+    state.mission.crate = { x: 955, y: 218, z: 105, vx: 6, vy: -7, vz: -4 };
     state.mission.bannerText = 'Crate away — watch it fall';
     state.missionTime = 52;
     state.score = 0;
@@ -64,5 +65,5 @@ export function autopilotControls(state) {
   }
   const targetAltitude = state.missionKind === 'landing' ? 62 : 240;
   const pitch = Math.max(-0.12, Math.min(0.12, (targetAltitude - a.y) * 0.002));
-  return { throttle: a.throttle, pitch, roll, yaw: 0, brake: false };
+  return { throttle: a.throttle, pitch, roll, yaw: 0, brake: false, flaps: state.missionKind === 'landing' };
 }

@@ -6,7 +6,7 @@ import { createAircraftState, stepFlightModel, refuelIfParked } from './flight-m
 import { createChaseCamera, updateChaseCamera, buildViewMatrix } from './camera.js';
 import {
   drawSky, drawSea, drawTerrainMesh, drawRunway, drawTownAndLighthouse,
-  drawClouds, drawMissionRings, drawCargoTarget, drawFallingCrate,
+  drawClouds, drawMissionRings, drawCargoTarget, drawFallingCrate, drawAircraftShadow,
 } from './renderer.js';
 import { drawChaseAircraft, drawCockpitPanel } from './aircraft.js';
 import { drawHud, drawCockpitInstruments, formatClock } from './hud.js';
@@ -116,6 +116,7 @@ function renderGame() {
     drawCargoTarget(ctx, view, state.mission.target, state.time);
     drawFallingCrate(ctx, view, state.mission.crate);
   }
+  if (!state.cockpitView) drawAircraftShadow(ctx, view, state.aircraft, state.heights);
   drawClouds(ctx, view, state.clouds);
   if (state.cockpitView) {
     drawCockpitPanel(ctx, width, height, state.aircraft, drawCockpitInstruments);
@@ -150,13 +151,14 @@ function drawTitleScreen(width, height) {
   ctx.font = '22px sans-serif';
   ctx.fillText('Island flight missions over Kestrel Bay', width / 2, height * 0.2 + 40);
   const lines = [
-    '1  RING COURSE — thread 8 rings around the island',
-    '2  CARGO DROP — deliver a crate to the harbour town',
-    '3  PRECISION LANDING — stop on the touchdown mark',
+    '1  RING COURSE · EASY — thread 8 rings, clean speed earns +150',
+    '2  CARGO DROP · MEDIUM — lead the beacon, mind the sea breeze',
+    '3  PRECISION LANDING · HARD — grease it on the touchdown mark',
     '',
-    'W/S throttle · arrows or mouse steer · A/D rudder · Space brake',
-    'B drop cargo · C camera · P pause · R restart',
-    'Watch fuel and airframe: park on the runway to refuel and repair',
+    'W/S or wheel throttle · arrows or mouse steer · A/D rudder',
+    'Space brake · F flaps · B drop cargo · C camera · P pause · R restart',
+    'Hard turns bleed speed and raise the stall — fly smooth, watch fuel',
+    'Park on the runway to refuel and repair a bent airframe',
   ];
   ctx.font = '20px sans-serif';
   lines.forEach((line, i) => ctx.fillText(line, width / 2, height * 0.36 + i * 34));

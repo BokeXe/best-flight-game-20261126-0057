@@ -106,30 +106,77 @@ export function terrainHeightAt(heights, x, z) {
   return a + (b - a) * xf + (c - a) * zf + (a - b - c + d) * xf * zf;
 }
 
-export function groundColour(height, slope) {
-  if (height < 1.5) return '#d9c48f'; // wet sand at the waterline
-  if (slope > 0.85) return '#8a7f72'; // bare rock only on the steepest faces
-  if (height < 26) return '#84b45c'; // meadow
-  if (height < 80) return '#639a4b'; // fields and pasture
-  if (height < 160) return '#4f7f42'; // wooded slopes
-  if (height < 300) return '#5d7a4a'; // high pasture
-  return '#e8eef2'; // summit snow, only on the highest ridge
+// Continuous ground palette: colour flows with height instead of stepping,
+// lowland cells take a patchwork field tint, and a light factor from the
+// face normal shades every quad so the mesh reads as lit ground, not tiles.
+const PALETTE_STOPS = [
+  [-6, [196, 178, 128]], // drowned sand under the shallows
+  [0.6, [222, 198, 142]], // dry beach at the waterline
+  [4, [150, 184, 96]], // shore grass
+  [26, [126, 176, 88]], // meadow
+  [80, [94, 150, 72]], // pasture
+  [160, [72, 122, 62]], // wooded slopes
+  [300, [96, 122, 76]], // high pasture
+  [420, [232, 238, 242]], // summit snow on the highest ridge
+];
+const FIELD_TINTS = [
+  [138, 188, 92], [112, 168, 80], [168, 192, 96],
+  [196, 182, 104], [122, 176, 104], [156, 170, 84],
+];
+
+function mixRgb(a, b, t) {
+  return [
+    Math.round(a[0] + (b[0] - a[0]) * t),
+    Math.round(a[1] + (b[1] - a[1]) * t),
+    Math.round(a[2] + (b[2] - a[2]) * t),
+  ];
+}
+
+export function groundColour(height, slope, patch = 0, light = 1) {
+  let rgb = PALETTE_STOPS[PALETTE_STOPS.length - 1][1];
+  for (let i = 1; i < PALETTE_STOPS.length; i++) {
+    if (height <= PALETTE_STOPS[i][0]) {
+      const [h0, c0] = PALETTE_STOPS[i - 1];
+      const [h1, c1] = PALETTE_STOPS[i];
+      rgb = mixRgb(c0, c1, (height - h0) / (h1 - h0));
+      break;
+    }
+  }
+  // Patchwork fields: neighbouring lowland blocks wear different crops.
+  if (height > 3 && height < 95 && slope < 0.5) {
+    const field = FIELD_TINTS[Math.floor(patch * FIELD_TINTS.length) % FIELD_TINTS.length];
+    rgb = mixRgb(rgb, field, 0.72);
+  }
+  if (slope > 0.85) rgb = mixRgb(rgb, [138, 127, 114], Math.min(0.8, (slope - 0.85) * 2.4));
+  const lit = Math.max(0.62, Math.min(1.18, light));
+  return `rgb(${Math.round(rgb[0] * lit)},${Math.round(rgb[1] * lit)},${Math.round(rgb[2] * lit)})`;
 }
 
 export function buildTownBuildings(seed) {
   const random = makeSeededRandom(seed ^ 0x9e3779b9);
   const buildings = [];
-  for (let i = 0; i < 46; i++) {
-    const angle = random() * Math.PI * 2;
-    const radius = 40 + random() * 230;
-    const x = TOWN_CENTRE.x + Math.cos(angle) * radius;
-    const z = TOWN_CENTRE.z + Math.sin(angle) * radius * 0.8;
+  // Two street rows along the shore road, then houses scattered behind them.
+  for (let i = 0; i < 64; i++) {
+    let x, z;
+    if (i < 26) {
+      const along = (i / 25 - 0.5) * 460;
+      x = TOWN_CENTRE.x + along * 0.35 + (random() - 0.5) * 18;
+      z = TOWN_CENTRE.z + along + (i % 2 ? 26 : -26) + (random() - 0.5) * 10;
+    } else {
+      const angle = random() * Math.PI * 2;
+      const radius = 40 + random() * 250;
+      x = TOWN_CENTRE.x + Math.cos(angle) * radius;
+      z = TOWN_CENTRE.z + Math.sin(angle) * radius * 0.8;
+    }
     buildings.push({
       x, z,
-      width: 16 + random() * 22,
-      depth: 14 + random() * 18,
-      height: 12 + random() * 34,
-      hue: 18 + random() * 30,
+      width: 15 + random() * 24,
+      depth: 13 + random() * 18,
+      height: 11 + random() * 36,
+      hue: 14 + random() * 34,
+      roofHue: 4 + random() * 22,
+      gabled: random() > 0.35,
+      litSeed: Math.floor(random() * 97),
     });
   }
   return buildings;
@@ -138,13 +185,16 @@ export function buildTownBuildings(seed) {
 export function buildCloudField(seed) {
   const random = makeSeededRandom(seed ^ 0x51ab3);
   const clouds = [];
-  for (let i = 0; i < 42; i++) {
+  for (let i = 0; i < 46; i++) {
+    const layer = random();
     clouds.push({
-      x: (random() - 0.5) * WORLD_SIZE * 1.2,
-      y: 340 + random() * 260,
-      z: (random() - 0.5) * WORLD_SIZE * 1.2,
-      radius: 90 + random() * 170,
-      puffs: 3 + Math.floor(random() * 3),
+      x: (random() - 0.5) * WORLD_SIZE * 1.25,
+      y: 330 + layer * 320,
+      z: (random() - 0.5) * WORLD_SIZE * 1.25,
+      radius: 80 + random() * 190,
+      puffs: 4 + Math.floor(random() * 4),
+      tone: 0.82 + random() * 0.18, // per-cloud brightness variation
+      drift: (random() - 0.5) * 0.4, // puff stagger so no two clouds match
     });
   }
   return clouds;

@@ -69,7 +69,8 @@ function drawPrimaryReadouts(ctx, width, height, a) {
     ctx.textAlign = 'center';
     ctx.fillStyle = DIM; ctx.font = 'bold 13px sans-serif';
     ctx.fillText(label, x + w / 2, y + 20);
-    ctx.fillStyle = label === 'SPD' && a.stalled ? RED : INK;
+    ctx.fillStyle = label === 'SPD' && a.stalled ? RED
+      : label === 'SPD' && a.stallMargin < 9 && !a.onGround ? AMBER : INK;
     ctx.font = 'bold 27px sans-serif';
     ctx.fillText(value, x + w / 2, y + 50);
   });
@@ -148,14 +149,18 @@ function drawGauges(ctx, width, height, a) {
     ctx.fillStyle = colour;
     ctx.beginPath(); ctx.roundRect(x + 14, ry + 8, Math.max(4, (w - 28) * Math.max(0, Math.min(1, frac))), 12, 6); ctx.fill();
   });
-  // Gear and stall-speed markers under the bars.
+  // Gear, flaps and live stall margin under the bars, short labels so the
+  // three markers never collide at screenshot size.
+  ctx.font = 'bold 12.5px sans-serif';
   ctx.textAlign = 'left';
   ctx.fillStyle = a.gearDown ? GREEN : DIM;
-  ctx.font = 'bold 14px sans-serif';
-  ctx.fillText(a.gearDown ? 'GEAR ▼ DOWN' : 'GEAR ▲ UP', x + 14, y + h - 16);
+  ctx.fillText(a.gearDown ? 'GEAR ▼' : 'GEAR ▲', x + 12, y + h - 16);
+  ctx.textAlign = 'center';
+  ctx.fillStyle = a.flapsDown ? AMBER : DIM;
+  ctx.fillText(a.flapsDown ? 'FLAPS ▼' : 'FLAPS —', x + w / 2, y + h - 16);
   ctx.textAlign = 'right';
-  ctx.fillStyle = a.speed < STALL_SPEED + 6 ? RED : DIM;
-  ctx.fillText(`STALL ${Math.round(STALL_SPEED * 1.94)}kt`, x + w - 14, y + h - 16);
+  ctx.fillStyle = a.stalled ? RED : a.stallMargin < 9 && !a.onGround ? AMBER : DIM;
+  ctx.fillText(a.onGround ? `STALL ${Math.round(STALL_SPEED * 1.94)}kt` : `+${Math.max(0, Math.round(a.stallMargin * 1.94))}kt`, x + w - 12, y + h - 16);
 }
 
 function drawMinimap(ctx, width, height, state) {
@@ -225,7 +230,8 @@ function drawTargetArrow(ctx, width, height, state) {
 
 function drawWarningLights(ctx, width, height, a, time) {
   const warnings = [];
-  if (a.stalled) warnings.push(['STALL', RED]);
+  if (a.stalled) warnings.push(['STALL — NOSE DOWN', RED]);
+  else if (a.stallMargin < 7 && !a.onGround) warnings.push(['STALL WARNING', AMBER]);
   if (a.fuel < 20 && a.fuel > 0) warnings.push(['LOW FUEL', AMBER]);
   if (a.fuel <= 0) warnings.push(['ENGINE OUT', RED]);
   if (a.damage > 55) warnings.push(['AIRFRAME DAMAGE', RED]);

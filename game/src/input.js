@@ -5,6 +5,8 @@ export function createInputState() {
   return {
     keys: new Set(),
     mouseSteer: { x: 0, y: 0, active: false },
+    stick: { pitch: 0, roll: 0 }, // smoothed stick position
+    flapsDown: false,
     throttleLever: 0,
     dropPressed: false,
     cameraPressed: false,
@@ -19,6 +21,7 @@ export function attachInputListeners(input, canvas) {
     const key = event.key.toLowerCase();
     input.keys.add(key);
     if (key === 'b') input.dropPressed = true;
+    if (key === 'f') input.flapsDown = !input.flapsDown;
     if (key === 'c') input.cameraPressed = true;
     if (key === 'p' || key === 'escape') input.pausePressed = true;
     if (key === 'r') input.restartPressed = true;
@@ -53,13 +56,21 @@ export function readControls(input, dt) {
   if (keys.has('a')) yaw -= 1;
   if (keys.has('d')) yaw += 1;
   if (input.mouseSteer.active && roll === 0 && pitch === 0) {
-    roll = clamp(input.mouseSteer.x * 1.6, -1, 1);
-    pitch = clamp(input.mouseSteer.y * 1.4, -1, 1);
+    // Mouse steering: a small deadzone, then an expo curve so fine aim near
+    // the centre stays gentle and full deflection still bites.
+    roll = expo(input.mouseSteer.x);
+    pitch = expo(input.mouseSteer.y);
   }
+  // Smooth the stick toward its target so taps and mouse jitter never
+  // snatch the controls, while held inputs still reach full travel fast.
+  const blend = Math.min(1, dt * 11);
+  input.stick.pitch += (pitch - input.stick.pitch) * blend;
+  input.stick.roll += (roll - input.stick.roll) * blend;
   const controls = {
     throttle: input.throttleLever,
-    pitch, roll, yaw,
+    pitch: input.stick.pitch, roll: input.stick.roll, yaw,
     brake: keys.has(' '),
+    flaps: input.flapsDown,
   };
   return controls;
 }
@@ -78,6 +89,12 @@ export function consumeOneShotInputs(input) {
   input.restartPressed = false;
   input.missionChoice = null;
   return out;
+}
+
+function expo(v) {
+  const dead = 0.06;
+  const mag = Math.max(0, Math.abs(v) - dead) / (1 - dead);
+  return clamp(Math.sign(v) * Math.pow(mag, 1.5) * 1.25, -1, 1);
 }
 
 function clamp01(v) { return Math.max(0, Math.min(1, v)); }
