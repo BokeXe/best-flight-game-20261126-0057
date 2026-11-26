@@ -29,16 +29,33 @@ export function drawSky(ctx, width, height, view) {
     ctx.ellipse(cx, cy, width * (0.16 + (i % 3) * 0.05), 5 + (i % 3) * 2, -0.04, 0, Math.PI * 2);
     ctx.fill();
   }
-  // Low sun over the western sea: a large disc inside layered warm glow.
+  // First stars prick the dusk blue overhead, above the violet band.
+  ctx.fillStyle = 'rgba(235,242,255,0.75)';
+  for (let i = 0; i < 46; i++) {
+    const sx = ((i * 389) % Math.max(1, width)) + Math.sin(view.cam.heading * 3 + i) * 4;
+    const sy = height * (0.02 + ((i * 71) % 20) / 100);
+    const tw = 0.5 + ((i * 37) % 10) / 14;
+    ctx.globalAlpha = tw * 0.8;
+    ctx.fillRect(sx, sy, 1.6, 1.6);
+  }
+  ctx.globalAlpha = 1;
+  // Low sun over the western sea: a large disc inside layered warm glow,
+  // with a horizontal lens-warmth streak through it.
   const sun = projectPoint(view, view.cam.x + SUNSET.x, view.cam.y + SUNSET.y, view.cam.z + SUNSET.z);
   if (sun) {
-    const glow = ctx.createRadialGradient(sun.x, sun.y, 6, sun.x, sun.y, 330);
+    const glow = ctx.createRadialGradient(sun.x, sun.y, 6, sun.x, sun.y, 380);
     glow.addColorStop(0, 'rgba(255,244,190,0.98)');
     glow.addColorStop(0.1, 'rgba(255,196,96,0.82)');
     glow.addColorStop(0.38, 'rgba(255,128,58,0.34)');
     glow.addColorStop(1, 'rgba(255,128,58,0)');
     ctx.fillStyle = glow;
-    ctx.fillRect(sun.x - 340, sun.y - 340, 680, 680);
+    ctx.fillRect(sun.x - 390, sun.y - 390, 780, 780);
+    const streak = ctx.createLinearGradient(sun.x - width * 0.42, 0, sun.x + width * 0.42, 0);
+    streak.addColorStop(0, 'rgba(255,170,90,0)');
+    streak.addColorStop(0.5, 'rgba(255,214,140,0.5)');
+    streak.addColorStop(1, 'rgba(255,170,90,0)');
+    ctx.fillStyle = streak;
+    ctx.fillRect(sun.x - width * 0.42, sun.y - 3, width * 0.84, 6);
     const disc = ctx.createRadialGradient(sun.x, sun.y, 2, sun.x, sun.y, 34);
     disc.addColorStop(0, '#fff7d6');
     disc.addColorStop(0.72, '#ffd98a');
@@ -46,7 +63,15 @@ export function drawSky(ctx, width, height, view) {
     ctx.fillStyle = disc;
     ctx.beginPath(); ctx.arc(sun.x, sun.y, 30, 0, Math.PI * 2); ctx.fill();
   }
-  // Warm haze hugs the horizon so the far coast melts into the sunset.
+  // Two haze layers stack the depth: a mauve far band under a warm near
+  // band, so headlands and the far coast melt into the sunset in steps.
+  const farTop = Math.max(0, horizon - height * 0.2);
+  const farHaze = ctx.createLinearGradient(0, farTop, 0, Math.min(height, horizon + height * 0.1));
+  farHaze.addColorStop(0, 'rgba(168,118,150,0)');
+  farHaze.addColorStop(0.6, 'rgba(168,118,150,0.30)');
+  farHaze.addColorStop(1, 'rgba(168,118,150,0)');
+  ctx.fillStyle = farHaze;
+  ctx.fillRect(0, farTop, width, Math.min(height, horizon + height * 0.1) - farTop);
   const hazeTop = Math.max(0, horizon - height * 0.1);
   const haze = ctx.createLinearGradient(0, hazeTop, 0, Math.min(height, horizon + height * 0.16));
   haze.addColorStop(0, 'rgba(255,170,110,0)');
@@ -73,25 +98,38 @@ export function drawSea(ctx, width, height, view, time) {
   corners.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
   ctx.closePath();
   ctx.fill();
-  // Sun glitter path: bright dashes gather in a widening lane under the sun.
+  // Sun glitter path: a reflected lane of light under the sun, bright
+  // dashes gathering in a widening column over a soft reflection wash.
   const sun = projectPoint(view, view.cam.x + SUNSET.x, 2, view.cam.z + SUNSET.z);
+  if (sun) {
+    const lane = ctx.createLinearGradient(0, height * 0.48, 0, height);
+    lane.addColorStop(0, 'rgba(255,180,100,0.30)');
+    lane.addColorStop(1, 'rgba(255,150,80,0.05)');
+    ctx.fillStyle = lane;
+    ctx.beginPath();
+    ctx.moveTo(sun.x - 34, height * 0.48);
+    ctx.lineTo(sun.x + 34, height * 0.48);
+    ctx.lineTo(sun.x + width * 0.22, height);
+    ctx.lineTo(sun.x - width * 0.22, height);
+    ctx.closePath(); ctx.fill();
+  }
   ctx.lineCap = 'round';
-  for (let i = 0; i < 90; i++) {
-    const t = i / 90;
+  for (let i = 0; i < 150; i++) {
+    const t = i / 150;
     const jitter = Math.sin(i * 127.1) * 43758.5453;
-    const spread = 26 + t * 210;
+    const spread = 22 + t * 230;
     const gx = sun ? sun.x + ((jitter - Math.floor(jitter)) - 0.5) * spread * 2 : (i * 173) % width;
     const gy = height * 0.5 + t * height * 0.48 + Math.sin(time * 1.7 + i * 2.3) * 2;
     if (gy < 0 || gy > height) continue;
-    const w = 5 + t * 22 + Math.sin(time * 2.4 + i) * 2.5;
-    ctx.strokeStyle = `rgba(255,${190 + Math.floor(t * 40)},110,${0.34 + t * 0.4})`;
-    ctx.lineWidth = 1.4 + t * 1.8;
+    const w = 4 + t * 24 + Math.sin(time * 2.4 + i) * 2.5;
+    ctx.strokeStyle = `rgba(255,${190 + Math.floor(t * 40)},110,${0.3 + t * 0.45})`;
+    ctx.lineWidth = 1.3 + t * 1.9;
     ctx.beginPath(); ctx.moveTo(gx - w, gy); ctx.lineTo(gx + w, gy); ctx.stroke();
   }
-  // Sparse cool sparkle away from the glitter lane keeps the water alive.
-  ctx.strokeStyle = 'rgba(190,215,255,0.28)';
+  // Wave sparkle across the whole bay keeps the water alive at dusk.
+  ctx.strokeStyle = 'rgba(190,215,255,0.30)';
   ctx.lineWidth = 1.4;
-  for (let i = 0; i < 26; i++) {
+  for (let i = 0; i < 44; i++) {
     const gx = view.cam.x + ((i * 613) % 1600) - 800;
     const gz = view.cam.z + ((i * 389) % 1600) - 800;
     const p = projectPoint(view, gx, 0.4, gz);
@@ -131,14 +169,16 @@ export function drawTerrainMesh(ctx, view, heights, camera) {
       // block tint and warm distance haze dissolve the grid into dusk ground.
       const gradX = (b.y - a.y + c.y - d.y) / (2 * step * CELL_METRES);
       const gradZ = (d.y - a.y + c.y - b.y) / (2 * step * CELL_METRES);
-      const light = 0.88 + gradX * 0.68 + gradZ * 0.24;
+      const light = 0.86 + gradX * 0.78 + gradZ * 0.26;
       const blockHash = Math.sin(Math.floor(gx / 6) * 127.1 + Math.floor(gz / 6) * 311.7) * 43758.5453;
       const patch = blockHash - Math.floor(blockHash);
       const midX = (a.x + c.x) / 2, midZ = (a.z + c.z) / 2;
       const cityDist = Math.hypot((midX - CITY_CENTRE.x) / 620, (midZ - CITY_CENTRE.z) / 900);
       const urban = Math.max(0, Math.min(1, 1.15 - cityDist));
-      const hazeAmt = Math.max(0, Math.min(0.5, (depth - 900) / 2600));
-      quads.push({ pa, pb, pc, pd, depth, colour: groundColour(avgH, slope, patch, light, urban), avgH, hazeAmt });
+      // Two depth bands: warm air in the middle distance, mauve air far off.
+      const hazeAmt = Math.max(0, Math.min(0.42, (depth - 800) / 2400));
+      const farAmt = Math.max(0, Math.min(0.38, (depth - 1900) / 2600));
+      quads.push({ pa, pb, pc, pd, depth, colour: groundColour(avgH, slope, patch, light, urban), avgH, hazeAmt, farAmt });
     }
   }
   quads.sort((q1, q2) => q2.depth - q1.depth);
@@ -154,6 +194,10 @@ export function drawTerrainMesh(ctx, view, heights, camera) {
     ctx.stroke();
     if (q.hazeAmt > 0.02) {
       ctx.fillStyle = `rgba(255,166,108,${q.hazeAmt.toFixed(3)})`;
+      ctx.fill();
+    }
+    if (q.farAmt > 0.02) {
+      ctx.fillStyle = `rgba(158,112,148,${q.farAmt.toFixed(3)})`;
       ctx.fill();
     }
   }
@@ -194,13 +238,19 @@ function drawCityStreets(ctx, view, heights) {
   }
   drawRoute(promenade, 'rgba(232,196,150,0.95)', 6);
   drawRoute(foam, 'rgba(255,240,220,0.75)', 2.5);
-  // Streetlights: warm points along the avenues, denser downtown.
+  // Streetlights: warm points with soft halos along the avenues, and
+  // brighter cross-street lights downtown so the grid glows as a network.
   for (const avenueX of [-190, -70, 55, 180, 305, 430]) {
-    for (let z = -1040; z <= 680; z += 64) {
+    for (let z = -1040; z <= 680; z += 56) {
       const p = projectPoint(view, avenueX + 6, terrainHeightAt(heights, avenueX, z) + 3, z);
       if (!p || p.depth > 2400) continue;
       const r = Math.max(1.1, p.scale * 1.5);
-      ctx.fillStyle = 'rgba(255,196,96,0.9)';
+      const halo = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r * 3.4);
+      halo.addColorStop(0, 'rgba(255,206,110,0.55)');
+      halo.addColorStop(1, 'rgba(255,206,110,0)');
+      ctx.fillStyle = halo;
+      ctx.beginPath(); ctx.arc(p.x, p.y, r * 3.4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,226,160,0.95)';
       ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill();
     }
   }
@@ -243,14 +293,30 @@ export function drawRunway(ctx, view, heights) {
       if (p) ctx.fillRect(p.x - Math.max(1.5, p.scale * 1.4), p.y - 2, Math.max(3, p.scale * 2.8), 4);
     }
   }
-  // Approach light bars south of the threshold guide the final at dusk.
-  for (let i = 1; i <= 4; i++) {
+  // Approach light bars south of the threshold guide the final at dusk,
+  // each with a halo, ending in green threshold lights at the strip.
+  for (let i = 1; i <= 5; i++) {
     const p = projectPoint(view, RUNWAY.x, y + 0.7, RUNWAY.z1 + i * 55);
     if (!p) continue;
     const w = Math.max(4, p.scale * (10 + i * 2));
-    ctx.strokeStyle = 'rgba(255,224,130,0.9)';
+    const halo = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, w * 0.8);
+    halo.addColorStop(0, 'rgba(255,224,130,0.4)');
+    halo.addColorStop(1, 'rgba(255,224,130,0)');
+    ctx.fillStyle = halo;
+    ctx.beginPath(); ctx.ellipse(p.x, p.y, w * 0.8, w * 0.3, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,236,170,0.95)';
     ctx.lineWidth = Math.max(1.5, p.scale * 1.4);
     ctx.beginPath(); ctx.moveTo(p.x - w / 2, p.y); ctx.lineTo(p.x + w / 2, p.y); ctx.stroke();
+  }
+  for (const side of [-1, 1]) {
+    const p = projectPoint(view, RUNWAY.x + side * (half - 2), y + 0.6, RUNWAY.z1 - 4);
+    if (!p) continue;
+    const r = Math.max(1.8, p.scale * 1.8);
+    const halo = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r * 3);
+    halo.addColorStop(0, 'rgba(90,255,150,0.9)');
+    halo.addColorStop(1, 'rgba(90,255,150,0)');
+    ctx.fillStyle = halo;
+    ctx.beginPath(); ctx.arc(p.x, p.y, r * 3, 0, Math.PI * 2); ctx.fill();
   }
   // A small lit terminal and apron east of the strip make it an airport.
   const term = projectPoint(view, RUNWAY.x + 95, y + 16, (RUNWAY.z0 + RUNWAY.z1) / 2);
@@ -325,13 +391,27 @@ export function drawCityAndHarbor(ctx, view, heights, buildings, time) {
         ctx.beginPath(); ctx.arc(p.x + depthPx * 0.3, p.y - Math.max(6, h * 0.1), 1.8, 0, Math.PI * 2); ctx.fill();
       }
     }
-    // Windows: dusk lights coming on, warm and uneven across the facade.
+    // Sunset rim on the west top edge keeps every block modelled, not flat.
+    ctx.strokeStyle = 'rgba(255,196,120,0.55)';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(p.x - w / 2, p.y + h); ctx.lineTo(p.x - w / 2, p.y); ctx.lineTo(p.x + w / 2, p.y);
+    ctx.stroke();
+    // Landmark crowns glow: a lit band and beacon cap the tallest towers.
+    if (b.landmark && w > 10) {
+      ctx.fillStyle = 'rgba(255,214,130,0.95)';
+      ctx.fillRect(p.x - w / 2, p.y + 2, w, Math.max(2.5, h * 0.035));
+      ctx.fillStyle = 'rgba(255,160,90,0.35)';
+      ctx.fillRect(p.x - w / 2, p.y + 2 + Math.max(2.5, h * 0.035), w, Math.max(3, h * 0.05));
+    }
+    // Windows: dense dusk lights, warm and uneven across the facade.
     if (w > 6 && h > 8) {
-      const cols = Math.max(1, Math.floor(w / 6.5)), rows = Math.max(1, Math.floor(h / 8));
+      const cols = Math.max(1, Math.floor(w / 5.4)), rows = Math.max(1, Math.floor(h / 6.8));
       for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
         const litWin = (r * 13 + c * 7 + b.litSeed) % 5 !== 0;
-        ctx.fillStyle = litWin ? 'rgba(255,214,130,0.96)' : 'rgba(30,38,66,0.8)';
-        ctx.fillRect(p.x - w / 2 + 2 + c * 6.5, p.y + 3 + r * 8, 2.8, 3.8);
+        const warm = (r * 7 + c * 11 + b.litSeed) % 4 === 0;
+        ctx.fillStyle = litWin ? (warm ? 'rgba(255,186,110,0.97)' : 'rgba(255,226,160,0.96)') : 'rgba(30,38,66,0.8)';
+        ctx.fillRect(p.x - w / 2 + 1.6 + c * 5.4, p.y + 2.6 + r * 6.8, 2.5, 3.3);
       }
     }
   }
@@ -430,6 +510,12 @@ export function drawClouds(ctx, view, clouds) {
       crown.addColorStop(1, 'rgba(240,150,140,0)');
       ctx.fillStyle = crown;
       ctx.beginPath(); ctx.ellipse(p.x + ox, p.y + oy, pr, pr * 0.52, 0, 0, Math.PI * 2); ctx.fill();
+      // A bright rim arc on the sunward crown edge lifts the cloud off the sky.
+      ctx.strokeStyle = `rgba(255,222,170,${0.5 * cloud.tone})`;
+      ctx.lineWidth = Math.max(1, pr * 0.05);
+      ctx.beginPath();
+      ctx.ellipse(p.x + ox, p.y + oy, pr * 0.92, pr * 0.46, 0, Math.PI * 1.05, Math.PI * 1.72);
+      ctx.stroke();
     }
     if (haze > 0.03) {
       ctx.fillStyle = `rgba(255,166,108,${haze.toFixed(3)})`;
@@ -521,18 +607,24 @@ export function drawCargoTarget(ctx, view, target, time) {
   ctx.fillText('DROP ZONE', p.x, p.y - r * 0.55 - Math.sin(time * 3) * 2);
 }
 
-// The aircraft's shadow on the ground below sells its height at a glance.
+// The V-wing's chevron shadow on the ground below sells its height and
+// its shape at a glance.
 export function drawAircraftShadow(ctx, view, aircraft, heights) {
   const groundY = Math.max(0, terrainHeightAt(heights, aircraft.x, aircraft.z));
   const p = projectPoint(view, aircraft.x, groundY + 0.4, aircraft.z);
   if (!p) return;
   const heightAbove = Math.max(0, aircraft.y - groundY);
-  const spread = Math.max(6, (26 + heightAbove * 0.12) * p.scale);
-  const alpha = Math.max(0.06, Math.min(0.34, 0.36 - heightAbove * 0.0009));
-  ctx.fillStyle = `rgba(18,30,44,${alpha.toFixed(3)})`;
+  const spread = Math.max(7, (30 + heightAbove * 0.13) * p.scale);
+  const alpha = Math.max(0.06, Math.min(0.36, 0.38 - heightAbove * 0.0009));
+  ctx.fillStyle = `rgba(18,24,44,${alpha.toFixed(3)})`;
   ctx.beginPath();
-  ctx.ellipse(p.x, p.y, spread, spread * 0.34, 0, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.moveTo(p.x - spread, p.y + spread * 0.1);
+  ctx.lineTo(p.x, p.y - spread * 0.16);
+  ctx.lineTo(p.x + spread, p.y + spread * 0.1);
+  ctx.lineTo(p.x + spread * 0.82, p.y + spread * 0.3);
+  ctx.lineTo(p.x, p.y + spread * 0.08);
+  ctx.lineTo(p.x - spread * 0.82, p.y + spread * 0.3);
+  ctx.closePath(); ctx.fill();
 }
 
 export function drawFallingCrate(ctx, view, crate) {

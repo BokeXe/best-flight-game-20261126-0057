@@ -14,10 +14,11 @@ export function shotSceneFromUrl(search) {
 export function applyShotScene(state, scene) {
   const a = state.aircraft;
   if (scene.shot === 'cover') {
-    // Chase view closing on ring 2 over the skyline: the gate fills the
-    // centre, lit towers below, sea and low sun ahead to the left.
+    // Chase view closing on ring 2, banked gently so the V planform shows:
+    // gate centred ahead, lit skyline filling the lower frame, sunset sea
+    // and low sun ahead to the left, instruments lit around the edges.
     state.missionKind = 'rings';
-    Object.assign(a, { x: 300, y: 240, z: 40, heading: -0.9, pitch: 0.02, roll: -0.14, speed: 62, throttle: 0.62, onGround: false, gearDown: false });
+    Object.assign(a, { x: 240, y: 225, z: -40, heading: -0.97, pitch: 0.02, roll: -0.08, speed: 62, throttle: 0.66, onGround: false, gearDown: false });
     state.missionTime = 41;
     state.score = 150;
     state.mission.ringIndex = 1;

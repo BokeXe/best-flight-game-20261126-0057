@@ -206,12 +206,36 @@ export function buildCityBuildings(seed) {
         tower: height > 72,
         litSeed: Math.floor(random() * 997),
       });
+      // A second, smaller block behind many lots layers the skyline so the
+      // city reads deep instead of one row of boxes along each avenue.
+      if (random() < 0.55) {
+        const backHeight = height * (0.4 + random() * 0.45) + 6;
+        buildings.push({
+          x: x + 34 + random() * 14, z: zz + (random() - 0.5) * 30,
+          width: 17 + random() * 18,
+          depth: 15 + random() * 16,
+          height: backHeight,
+          hue: 14 + random() * 34,
+          roofHue: 216 + random() * 28,
+          tower: backHeight > 76,
+          litSeed: Math.floor(random() * 997),
+        });
+      }
     }
   }
-  // The landmark tower anchors the skyline in every screenshot.
+  // Landmark towers anchor the skyline in every screenshot: the central
+  // spire plus two lit-crown towers north and south along the waterfront.
   buildings.push({
     x: 150, z: -330, width: 46, depth: 40, height: 168,
     hue: 26, roofHue: 228, tower: true, landmark: true, litSeed: 731,
+  });
+  buildings.push({
+    x: -120, z: -560, width: 38, depth: 34, height: 128,
+    hue: 22, roofHue: 224, tower: true, landmark: true, litSeed: 412,
+  });
+  buildings.push({
+    x: 215, z: 60, width: 40, depth: 36, height: 118,
+    hue: 30, roofHue: 232, tower: true, landmark: true, litSeed: 905,
   });
   return buildings;
 }
