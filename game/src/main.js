@@ -2,7 +2,7 @@
 // and the render order that ties the sunset coast, aircraft, missions and
 // HUD together.
 
-import { buildCoastalHeightfield, buildCityBuildings, buildCloudField, buildTraffic, terrainHeightAt } from './terrain.js';
+import { buildCoastalHeightfield, buildCityBuildings, buildCloudField, buildTraffic, buildBoats, terrainHeightAt } from './terrain.js';
 import { createAircraftState, stepFlightModel, refuelIfParked } from './flight-model.js';
 import { createChaseCamera, updateChaseCamera, buildViewMatrix } from './camera.js';
 import { createWebglRenderer } from './webgl-renderer.js';
@@ -43,6 +43,7 @@ function createGameState(seed) {
     buildings: buildCityBuildings(seed),
     clouds: buildCloudField(seed),
     traffic: buildTraffic(seed),
+    boats: buildBoats(seed),
     cash: 0,
     aircraft,
     prevAircraft: { ...aircraft },
@@ -282,7 +283,8 @@ if (scene) {
   state.buildings = buildCityBuildings(scene.seed);
   state.clouds = buildCloudField(scene.seed);
   state.traffic = buildTraffic(scene.seed);
-  const shotMission = scene.shot === 'cover' ? 'rings'
+  state.boats = buildBoats(scene.seed);
+  const shotMission = scene.shot === 'cover' ? 'canyon'
     : scene.shot === 'landing' ? 'landing'
       : scene.shot === 'attack' ? MISSION_ATTACK : 'cargo';
   state.missionKind = shotMission;

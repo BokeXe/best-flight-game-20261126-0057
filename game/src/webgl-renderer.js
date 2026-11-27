@@ -11,7 +11,7 @@ import {
 import {
   buildTerrainGeometry, buildCityGeometry, buildRunwayGeometry,
   buildHarborGeometry, buildStreetlightPoints, buildCloudBillboards,
-  buildStreetsGeometry, buildLandmarksGeometry, buildCarGeometry,
+  buildStreetsGeometry, buildLandmarksGeometry, buildCarGeometry, buildBoatGeometry,
 } from './gl-world.js';
 import {
   buildAircraftGeometry, buildElevonGeometry, buildExhaustGeometry,
@@ -21,7 +21,7 @@ import {
   perspectiveMatrix, viewMatrixFromBasis, multiplyMatrices,
   bodyMatrix, facingMatrix, translateMatrix, identityMatrix,
 } from './math3d.js';
-import { SUNSET, terrainHeightAt, trafficPose } from './terrain.js';
+import { SUNSET, terrainHeightAt, trafficPose, boatPose } from './terrain.js';
 
 const SUN_DIR = normalize([SUNSET.x, SUNSET.y * 2.2, SUNSET.z]);
 const FOG_COLOR = [0.72, 0.44, 0.38];
@@ -76,6 +76,12 @@ class WebglRenderer {
     this.identity = identityMatrix();
     this.camPos = [0, 0, 0];
     this.carPose = { x: 0, y: 0, z: 0, heading: 0 };
+    this.boatPoseScratch = { x: 0, y: 0, z: 0, heading: 0 };
+    this.boatMeshes = new Map();
+    for (const boat of state.boats || []) {
+      const key = (boat.cargo ? 'cargo' : 'sail') + boat.color.join(',');
+      if (!this.boatMeshes.has(key)) this.boatMeshes.set(key, uploadGeometry(gl, buildBoatGeometry(boat)));
+    }
     this.trailLeft = { data: new Float32Array(48 * 3), start: 0, count: 0 };
     this.trailRight = { data: new Float32Array(48 * 3), start: 0, count: 0 };
     this.trailPositions = new Float32Array(96 * 3);
@@ -138,6 +144,7 @@ class WebglRenderer {
     this.drawLit(this.landmarks, viewProj, this.identity, camPos, false);
     this.drawLit(this.city, viewProj, this.identity, camPos, true);
     this.drawSea(viewProj, camPos, state.time);
+    this.drawBoats(state, viewProj, camPos);
     this.drawTraffic(state, viewProj, camPos);
     this.drawMissionObjects(state, viewProj, camPos);
     this.drawAircraft(state, viewProj, camPos);
@@ -187,6 +194,20 @@ class WebglRenderer {
     gl.uniform1i(this.lit.uniforms.uWindows, 0);
     gl.uniform1f(this.lit.uniforms.uUseWindows, useWindows ? 1 : 0);
     gl.drawElements(gl.TRIANGLES, geometry.count, gl.UNSIGNED_INT, 0);
+  }
+
+  drawBoats(state, viewProj, camPos) {
+    for (const boat of state.boats || []) {
+      const pose = boatPose(boat, state.time, this.boatPoseScratch);
+      const key = (boat.cargo ? 'cargo' : 'sail') + boat.color.join(',');
+      let mesh = this.boatMeshes.get(key);
+      if (!mesh) {
+        mesh = uploadGeometry(this.gl, buildBoatGeometry(boat));
+        this.boatMeshes.set(key, mesh);
+      }
+      bodyMatrix(pose.x, pose.y, pose.z, pose.heading, Math.sin(state.time * 0.6 + boat.offset) * 0.02, Math.sin(state.time * 0.45 + boat.offset * 0.3) * 0.03, 1, this.modelScratch);
+      this.drawLit(mesh, viewProj, this.modelScratch, camPos, false);
+    }
   }
 
   drawTraffic(state, viewProj, camPos) {

@@ -152,6 +152,21 @@ export function buildCityGeometry(buildings, heights) {
     const color = family.map((c) => Math.min(1, c * lift));
     b.box(building.x, base + building.height / 2, building.z,
       building.width, building.height, building.depth, color, 1);
+    // Rooftop clutter — water tanks, lift houses, vent stacks — so a
+    // low pass over the roofs reads as a lived-in city, not bare boxes.
+    const roofSeed = Math.abs(Math.floor(building.litSeed || building.hue * 31));
+    if (building.height > 24) {
+      const tankX = building.x + ((roofSeed % 7) - 3) * 2.2;
+      const tankZ = building.z + ((roofSeed % 5) - 2) * 2.6;
+      b.cylinder(tankX, base + building.height + 3.4, tankZ, 3.2, 6.8, [0.5, 0.4, 0.34], 8);
+      b.box(building.x - building.width * 0.22, base + building.height + 2,
+        building.z + building.depth * 0.2, 7, 4, 6, [0.4, 0.38, 0.44]);
+    }
+    if (building.tower) {
+      b.box(building.x + building.width * 0.24, base + building.height + 1.6,
+        building.z - building.depth * 0.18, 5, 3.2, 5, [0.55, 0.52, 0.5]);
+      b.box(building.x, base + building.height + 5.5, building.z, 0.8, 9, 0.8, [0.7, 0.68, 0.66]);
+    }
     if (building.landmark) {
       // A lit crown and beacon so the landmarks anchor every skyline view.
       b.box(building.x, base + building.height + 3, building.z,
@@ -212,18 +227,52 @@ export function buildHarborGeometry(heights) {
   const b = new GeometryBuilder();
   const quayY = 3.2;
   b.box(HARBOR.x, quayY, HARBOR.z, 240, 3, 300, [0.42, 0.38, 0.36]);
-  // Two portal cranes: legs, beam and a hanging spreader.
-  for (const dz of [-70, 40]) {
+  // Three portal cranes: legs, beam, trolley and a hanging spreader,
+  // the third one slewed toward the container yard for variety.
+  for (const dz of [-110, -10, 90]) {
     const cz = HARBOR.z + dz;
     b.box(HARBOR.x - 60, quayY + 22, cz, 5, 44, 5, [0.85, 0.42, 0.2]);
     b.box(HARBOR.x + 60, quayY + 22, cz, 5, 44, 5, [0.85, 0.42, 0.2]);
     b.box(HARBOR.x, quayY + 46, cz, 150, 5, 6, [0.9, 0.5, 0.24]);
     b.box(HARBOR.x - 30, quayY + 34, cz, 16, 10, 10, [0.3, 0.5, 0.62]);
+    b.box(HARBOR.x - 30, quayY + 44, cz, 8, 4, 8, [0.95, 0.8, 0.4]);
+  }
+  // Container yard: stacked boxes in shipping colours, two and three
+  // high, so the quay reads as a working port from the air.
+  const boxColors = [
+    [0.72, 0.28, 0.2], [0.2, 0.42, 0.66], [0.24, 0.56, 0.34],
+    [0.85, 0.55, 0.18], [0.5, 0.3, 0.55], [0.75, 0.72, 0.68],
+  ];
+  let seed = 4242;
+  const rand = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+  for (let row = 0; row < 4; row++) {
+    for (let col = 0; col < 7; col++) {
+      if (rand() < 0.18) continue;
+      const cx = HARBOR.x + 30 + row * 22;
+      const cz = HARBOR.z - 120 + col * 34;
+      const stack = 1 + Math.floor(rand() * 3);
+      for (let s = 0; s < stack; s++) {
+        b.box(cx, quayY + 3 + s * 5.4, cz, 18, 5.2, 30, boxColors[Math.floor(rand() * boxColors.length)]);
+      }
+    }
   }
   // Moored hulls with lit cabins riding the harbour water.
   for (const [dx, dz, len] of [[-150, -40, 90], [-150, 90, 70], [40, 190, 60]]) {
     b.box(HARBOR.x + dx, 2.5, HARBOR.z + dz, 16, 6, len, [0.22, 0.28, 0.4]);
     b.box(HARBOR.x + dx, 8, HARBOR.z + dz - len / 4, 12, 6, 14, [0.9, 0.85, 0.7]);
+  }
+  // Marina south of the quay: finger piers with moored sailboats,
+  // masts catching the last light.
+  for (let pier = 0; pier < 3; pier++) {
+    const pz = HARBOR.z + 210 + pier * 46;
+    b.box(HARBOR.x - 70, 2.2, pz, 110, 1.6, 6, [0.45, 0.36, 0.28]);
+    for (let boat = 0; boat < 5; boat++) {
+      const bx = HARBOR.x - 112 + boat * 22;
+      const bz = pz + (boat % 2 ? 8 : -8);
+      b.box(bx, 1.6, bz, 4.4, 1.8, 11, [0.88, 0.86, 0.8]);
+      b.box(bx, 8.5, bz, 0.5, 13, 0.5, [0.8, 0.78, 0.72]);
+      b.box(bx, 7.5, bz + 1.6, 0.3, 9, 3.4, [0.95, 0.9, 0.8]);
+    }
   }
   // Lighthouse on the north headland: striped tower, gallery, lamp room.
   const lhBase = terrainHeightAt(heights, LIGHTHOUSE.x, LIGHTHOUSE.z);
@@ -320,6 +369,56 @@ export function buildLandmarksGeometry(heights) {
   for (let x = -690; x <= -250; x += 44) {
     b.box(x, deckY + 3.4, bz - 7, 2, 2, 2, [1, 0.8, 0.4], 0);
     b.box(x, deckY + 3.4, bz + 7, 2, 2, 2, [1, 0.8, 0.4], 0);
+  }
+  // Ferris wheel on the waterfront promenade: a lit rim of cabins
+  // turning the skyline into a postcard from the sunset side.
+  const wheelX = -215, wheelZ = -340;
+  const wheelBase = terrainHeightAt(heights, wheelX, wheelZ);
+  const wheelY = wheelBase + 42;
+  b.box(wheelX - 10, wheelBase + 20, wheelZ, 3, 42, 3, [0.4, 0.38, 0.5]);
+  b.box(wheelX + 10, wheelBase + 20, wheelZ, 3, 42, 3, [0.4, 0.38, 0.5]);
+  const cabins = 14;
+  for (let i = 0; i < cabins; i++) {
+    const a = (i / cabins) * Math.PI * 2;
+    const cx = wheelX + Math.cos(a) * 34;
+    const cy = wheelY + Math.sin(a) * 34;
+    b.box(cx, cy, wheelZ, 5, 5, 5, i % 2 ? [1, 0.62, 0.3] : [0.45, 0.75, 0.95]);
+    b.box(wheelX + Math.cos(a) * 17, wheelY + Math.sin(a) * 17, wheelZ, 1.4, 1.4, 1.4, [0.85, 0.82, 0.75]);
+  }
+  b.cylinder(wheelX, wheelY, wheelZ, 3.4, 3, [1, 0.85, 0.45], 10, 1.2);
+  // Water tower over the suburbs: a tank on legs every pilot can spot.
+  const towerX = 700, towerZ = 300;
+  const towerBase = terrainHeightAt(heights, towerX, towerZ);
+  for (const [lx, lz] of [[-8, -8], [8, -8], [-8, 8], [8, 8]]) {
+    b.box(towerX + lx, towerBase + 14, towerZ + lz, 2.4, 28, 2.4, [0.42, 0.36, 0.34]);
+  }
+  b.cylinder(towerX, towerBase + 35, towerZ, 13, 14, [0.62, 0.5, 0.42], 12);
+  b.cylinder(towerX, towerBase + 44, towerZ, 13.6, 3, [0.5, 0.3, 0.24], 12);
+  // Clock tower downtown: a slim shaft with a lit clock face and spire.
+  const clockX = 95, clockZ = -180;
+  const clockBase = terrainHeightAt(heights, clockX, clockZ);
+  b.box(clockX, clockBase + 34, clockZ, 14, 68, 14, [0.58, 0.48, 0.4], 1);
+  b.box(clockX, clockBase + 72, clockZ, 17, 9, 17, [1, 0.88, 0.6]);
+  b.cylinder(clockX, clockBase + 82, clockZ, 3, 12, [0.3, 0.3, 0.42], 8);
+  b.box(clockX, clockBase + 90, clockZ, 2, 2, 2, [1, 0.3, 0.22]);
+  return b.build();
+}
+
+// One bay boat: hull, cabin and a lit masthead. Cargo boats get a
+// container block; sailboats a white sail triangle of boxes.
+export function buildBoatGeometry(boat) {
+  const b = new GeometryBuilder();
+  if (boat.cargo) {
+    b.box(0, 2.2, 0, 13, 5, 62, boat.color);
+    b.box(0, 6.4, 20, 10, 5, 12, [0.9, 0.86, 0.74]);
+    b.box(0, 5.6, -8, 11, 3.4, 16, [0.72, 0.3, 0.22]);
+    b.box(0, 5.6, -24, 11, 3.4, 14, [0.22, 0.42, 0.62]);
+    b.box(0, 10.5, 20, 1, 4, 1, [1, 0.9, 0.6]);
+  } else {
+    b.box(0, 1.2, 0, 4.6, 2, 13, [0.9, 0.88, 0.82]);
+    b.box(0, 8, 0, 0.5, 13, 0.5, [0.8, 0.78, 0.72]);
+    b.box(0, 7.2, 2.1, 0.3, 9.5, 4.2, [0.96, 0.92, 0.84]);
+    b.box(0, 14.8, 0, 1.1, 1.1, 1.1, [1, 0.85, 0.45]);
   }
   return b.build();
 }

@@ -103,7 +103,13 @@ void main() {
   float spec128 = spec64 * spec64;
   float spec = spec128 * spec8 * spec4;
   float sparkle = step(0.72, n2);
-  vec3 col = base + vec3(1.0, 0.62, 0.28) * spec * (2.0 + sparkle * 3.0);
+  // A broad glitter path under the sun azimuth: fragments aligned
+  // between camera and sun catch a wider, softer gold sheen.
+  vec3 toFrag = normalize(vWorld - uCamPos);
+  float sunAlign = max(dot(toFrag.xz, normalize(uSunDir.xz)), 0.0);
+  float path = sunAlign * sunAlign * sunAlign * sunAlign;
+  float glitter = spec * (2.0 + sparkle * 3.0) + path * (0.12 + sparkle * 0.35) * spec4;
+  vec3 col = base + vec3(1.0, 0.62, 0.28) * glitter;
   float dist = length(uCamPos - vWorld);
   float fog = 1.0 - exp(-dist * dist * 0.000000048);
   gl_FragColor = vec4(mix(col, uFogColor, fog), 1.0);
@@ -146,8 +152,8 @@ uniform sampler2D uWindows;
 uniform float uUseWindows;
 void main() {
   float diffuse = vDiffuse;
-  vec3 ambient = vec3(0.48, 0.42, 0.56);
-  vec3 sunlight = vec3(1.0, 0.62, 0.34) * diffuse * 1.22;
+  vec3 ambient = vec3(0.56, 0.48, 0.62);
+  vec3 sunlight = vec3(1.0, 0.62, 0.34) * diffuse * 1.3;
   vec3 col = vColor * (ambient + sunlight);
   if (uUseWindows > 0.5) {
     vec3 win = texture2D(uWindows, vUv).rgb;
@@ -156,6 +162,10 @@ void main() {
   col += vColor * vEmissive;
   col *= 1.04;
   float dist = length(uCamPos - vWorld);
+  // Layered dusk haze: a warm near band over the city shelf, then the
+  // far fog that melts the hills into the sunset.
+  float nearHaze = (1.0 - exp(-dist * 0.00045)) * 0.16;
+  col = mix(col, vec3(0.92, 0.6, 0.42), nearHaze);
   float fog = 1.0 - exp(-dist * dist * 0.000000048);
   gl_FragColor = vec4(mix(col, uFogColor, fog), 1.0);
 }`;

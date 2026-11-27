@@ -14,21 +14,21 @@ export function shotSceneFromUrl(search) {
 export function applyShotScene(state, scene) {
   const a = state.aircraft;
   if (scene.shot === 'cover') {
-    // The cover frame: chase view banked over the shoreline toward the
-    // second ring, the Sunwing large in frame, lit skyline below right,
-    // sunset sea and the ring ahead — the whole game in one glance.
-    state.missionKind = 'rings';
+    // The cover frame: a low chase shot threading the avenue canyon
+    // between lit towers toward the sunset sea — Sunwing large in
+    // frame, gate ahead, traffic below, glitter path on the water.
+    state.missionKind = 'canyon';
     Object.assign(a, {
-      x: 145, y: 218, z: 75, heading: -0.6, pitch: 0.02, roll: -0.38,
-      speed: 56, throttle: 0.66, boostCharge: 0.8, boostBlend: 0.2,
+      x: 150, y: 88, z: 300, heading: -0.55, pitch: 0.01, roll: -0.3,
+      speed: 58, throttle: 0.7, boostCharge: 0.8, boostBlend: 0.3,
       onGround: false, gearDown: false,
     });
     state.missionTime = 42;
     state.score = 300;
     state.cash = 180;
-    state.mission.ringIndex = 1;
-    state.mission.target = state.mission.rings[1];
-    state.mission.bannerText = 'Ring 2 of 8 — over the skyline to the sunset sea';
+    state.mission.ringIndex = 2;
+    state.mission.target = state.mission.rings[2];
+    state.mission.bannerText = 'Gate 3 of 9 — in the canyon, bonus live';
   } else if (scene.shot === 'attack') {
     // Attack dive on the third harbour marker: cockpit sight tracking,
     // tracer live, boost burning, cranes and glittering water below.
@@ -47,9 +47,10 @@ export function applyShotScene(state, scene) {
     state.mission.hits = 2;
     state.mission.shots = 3;
   } else if (scene.shot === 'landing') {
-    // Final approach close over the threshold: runway large and centred,
-    // approach lights leading in, city lights beyond, gear and flaps set.
+    // Final approach from the cockpit: runway large and centred over
+    // the lit panel, approach lights leading in, gear and flaps set.
     state.missionKind = 'landing';
+    state.cockpitView = true;
     Object.assign(a, { x: 260, y: 34, z: 1245, heading: 0, pitch: -0.04, roll: 0.02, speed: 34, throttle: 0.28, onGround: false, gearDown: true });
     state.missionTime = 92;
     state.score = 0;

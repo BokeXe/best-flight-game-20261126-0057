@@ -56,7 +56,7 @@ export function buildTraffic(seed) {
   ];
   const cars = [];
   for (const avenueX of AVENUES) {
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < 11; i++) {
       const dir = random() < 0.5 ? 1 : -1;
       cars.push({
         axis: 'z', road: avenueX, lane: dir > 0 ? 5.5 : -5.5, dir,
@@ -66,7 +66,7 @@ export function buildTraffic(seed) {
     }
   }
   for (const streetZ of CROSS_STREETS) {
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 6; i++) {
       const dir = random() < 0.5 ? 1 : -1;
       cars.push({
         axis: 'x', road: streetZ, lane: dir > 0 ? -5 : 5, dir,
@@ -95,6 +95,34 @@ export function trafficPose(car, time, heights, out = null) {
   pose.z = car.road + car.lane;
   pose.y = terrainHeightAt(heights, pose.x, pose.z) + 0.9;
   pose.heading = car.dir > 0 ? Math.PI / 2 : -Math.PI / 2;
+  return pose;
+}
+
+// Harbour traffic on the water: cargo ships and sailboats crossing the
+// bay on fixed lanes, each a pure function of mission time like the cars.
+export function buildBoats(seed) {
+  const random = makeSeededRandom(seed ^ 0xb0a75);
+  const boats = [];
+  for (let i = 0; i < 7; i++) {
+    boats.push({
+      laneX: -620 - i * 130 - random() * 60,
+      dir: i % 2 ? 1 : -1,
+      speed: 4 + random() * 3.5,
+      offset: -1500 + random() * 3000,
+      cargo: i < 3,
+      color: [[0.24, 0.3, 0.42], [0.6, 0.3, 0.22], [0.3, 0.44, 0.5]][i % 3],
+    });
+  }
+  return boats;
+}
+
+export function boatPose(boat, time, out = null) {
+  const pose = out || { x: 0, y: 0, z: 0, heading: 0 };
+  const span = 3000;
+  pose.z = -1500 + ((boat.offset + boat.dir * boat.speed * time) % span + span) % span;
+  pose.x = boat.laneX + Math.sin(time * 0.11 + boat.offset) * 14;
+  pose.y = 1.4 + Math.sin(time * 0.7 + boat.offset * 0.7) * 0.35;
+  pose.heading = boat.dir > 0 ? Math.PI : 0;
   return pose;
 }
 
