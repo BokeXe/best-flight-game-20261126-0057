@@ -35,9 +35,13 @@ export function drawHud(ctx, width, height, state) {
 }
 
 function panel(ctx, x, y, w, h) {
-  ctx.fillStyle = 'rgba(24,16,38,0.78)';
+  ctx.fillStyle = 'rgba(24,16,38,0.82)';
   ctx.beginPath(); ctx.roundRect(x, y, w, h, 10); ctx.fill();
-  ctx.strokeStyle = 'rgba(255,179,71,0.4)';
+  // A lit top edge makes each instrument read as a physical panel
+  // against both the bright sky and the dark ground.
+  ctx.fillStyle = 'rgba(255,214,150,0.16)';
+  ctx.beginPath(); ctx.roundRect(x + 3, y + 3, w - 6, Math.min(12, h - 6), 7); ctx.fill();
+  ctx.strokeStyle = 'rgba(255,179,71,0.55)';
   ctx.lineWidth = 1.5; ctx.stroke();
 }
 

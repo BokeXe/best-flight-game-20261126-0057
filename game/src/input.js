@@ -73,7 +73,7 @@ export function readControls(input, dt) {
   // snatch the controls, while held inputs still reach full travel fast.
   // The exponential blend is frame-rate independent, and the returned
   // controls object is reused so sampling allocates nothing per frame.
-  const blend = 1 - Math.exp(-dt * 14);
+  const blend = 1 - Math.exp(-dt * 18);
   input.stick.pitch += (pitch - input.stick.pitch) * blend;
   input.stick.roll += (roll - input.stick.roll) * blend;
   const controls = input.controls;

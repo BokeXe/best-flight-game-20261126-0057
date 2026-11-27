@@ -220,8 +220,9 @@ function updateAttackMission(mission, aircraft, state, dt, heights) {
   const rangeFactor = dist < 1000 ? 1 : Math.max(0, 1 - (dist - 1000) / 700);
   mission.range = dist;
   mission.alignment = alignment;
-  mission.lock = Math.max(0, Math.min(1, (alignment - 0.82) / 0.16)) * rangeFactor * (dist < 55 ? 0.35 : 1);
-  mission.inReticle = alignment > 0.962 && dist >= 55 && dist <= 980;
+  const targetLock = Math.max(0, Math.min(1, (alignment - 0.80) / 0.17)) * rangeFactor * (dist < 55 ? 0.35 : 1);
+  mission.lock += (targetLock - mission.lock) * Math.min(1, dt * 7);
+  mission.inReticle = alignment > 0.952 && mission.lock > 0.72 && dist >= 55 && dist <= 980;
   mission.attackWindow = agl >= 14 && agl <= 190 && aircraft.speed >= 34;
   const cue = mission.inReticle
     ? (mission.attackWindow ? 'LOCK — press B' : agl > 190 ? 'LOCK — dive into the window' : agl < 14 ? 'LOCK — pull up' : 'LOCK — build speed')
@@ -231,7 +232,7 @@ function updateAttackMission(mission, aircraft, state, dt, heights) {
   state.fireRequested = false;
   if (mission.cooldown > 0) return;
   mission.shots++;
-  mission.cooldown = 0.38;
+  mission.cooldown = 0.32;
   mission.pulseUntil = state.time + 0.16;
   mission.pulseX = target.x;
   mission.pulseY = target.y + 8;
@@ -263,7 +264,8 @@ function updateAttackMission(mission, aircraft, state, dt, heights) {
       mission.target = mission.targets[mission.targetIndex];
     }
   } else {
-    state.flash = !mission.inReticle ? 'PULSE MISSED'
+    state.flash = !mission.inReticle
+      ? (mission.alignment > 0.90 ? 'NEAR LOCK — CENTRE IT' : 'PULSE MISSED')
       : agl > 190 ? 'TOO HIGH — DIVE'
         : agl < 14 ? 'TOO LOW — PULL UP' : 'TOO SLOW — BOOST';
     state.flashUntil = state.time + 0.9;

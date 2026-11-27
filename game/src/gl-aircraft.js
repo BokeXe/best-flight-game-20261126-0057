@@ -50,9 +50,9 @@ class PartBuilder {
     }
   }
 
-  // An 8-sided tapered pod along z: nose at zFront, tail at zBack.
+  // A 16-sided tapered pod along z: nose at zFront, tail at zBack.
   pod(zFront, zBack, radiusFront, radiusBack, y, color) {
-    const sides = 8;
+    const sides = 16;
     const ring = (z, r) => {
       const ids = [];
       for (let i = 0; i < sides; i++) {
@@ -138,13 +138,35 @@ export function buildAircraftGeometry() {
     [0.13, 0.55, 2.3],
     [-0.13, 0.55, 2.3],
   ], 0.05, ACCENT, ACCENT);
+  // Canopy frame and wing panel ribs: thin built structure that keeps
+  // the V-wing reading as an aircraft at contact-sheet size.
+  b.panel([
+    [-0.42, 0.86, -1.7],
+    [0.42, 0.86, -1.7],
+    [0.34, 0.78, -0.5],
+    [-0.34, 0.78, -0.5],
+  ], 0.04, HULL_SHADE, HULL_SHADE);
+  for (const side of [-1, 1]) {
+    b.panel([
+      [side * 2.4, 0.39, -0.9],
+      [side * 5.9, 0.45, 0.75],
+      [side * 5.9, 0.44, 0.95],
+      [side * 2.4, 0.38, -0.65],
+    ], 0.035, HULL_SHADE, HULL_SHADE);
+    b.panel([
+      [side * 1.3, 0.34, 0.8],
+      [side * 6.2, 0.42, 2.0],
+      [side * 6.2, 0.41, 2.18],
+      [side * 1.3, 0.33, 1.05],
+    ], 0.03, HULL_SHADE, HULL_SHADE);
+  }
   // Twin exhaust rings at the notch, emissive with throttle in the shader
   // via the renderer's per-draw emissive scale on a separate small mesh.
   return b.build();
 }
 
 PartBuilder.prototype.podAt = function podAt(cx, cy, zFront, zBack, radius, color) {
-  const sides = 6;
+  const sides = 12;
   const ring = (z) => {
     const ids = [];
     for (let i = 0; i < sides; i++) {
@@ -205,7 +227,7 @@ export function buildNavLightPoints() {
 // The tube stays slim so a gate reads as a hoop to thread, not a wall.
 export function buildRingGeometry(radius) {
   const b = new PartBuilder();
-  const tube = 1.1, ringSegs = 36, tubeSegs = 8;
+  const tube = 1.1, ringSegs = 64, tubeSegs = 12;
   const color = [1, 0.78, 0.25];
   const ids = [];
   for (let i = 0; i <= ringSegs; i++) {

@@ -14,21 +14,22 @@ export function shotSceneFromUrl(search) {
 export function applyShotScene(state, scene) {
   const a = state.aircraft;
   if (scene.shot === 'cover') {
-    // The cover frame: a low chase shot down the avenue canyon itself,
-    // Sunwing large and clear of the rooftops, one gate ahead over the
-    // street, lit towers either side and the sunset sea beyond.
+    // The cover frame: the Sunwing centred in the avenue gap itself,
+    // large in the chase view with one canyon gate ahead, lit towers
+    // either side and the sunset sea beyond — the complete game in
+    // one glance, with no rooftop crossing the airframe.
     state.missionKind = 'canyon';
     Object.assign(a, {
-      x: 105, y: 104, z: 315, heading: -0.42, pitch: 0.01, roll: -0.22,
-      speed: 58, throttle: 0.7, boostCharge: 0.8, boostBlend: 0.3,
+      x: 92, y: 96, z: 468, heading: -0.30, pitch: 0.0, roll: -0.18,
+      speed: 56, throttle: 0.68, boostCharge: 0.8, boostBlend: 0.25,
       onGround: false, gearDown: false,
     });
     state.missionTime = 42;
     state.score = 300;
     state.cash = 180;
-    state.mission.ringIndex = 2;
-    state.mission.target = state.mission.rings[2];
-    state.mission.bannerText = 'Gate 3 of 9 — in the canyon, bonus live';
+    state.mission.ringIndex = 1;
+    state.mission.target = state.mission.rings[1];
+    state.mission.bannerText = 'Gate 2 of 9 — in the canyon, bonus live';
   } else if (scene.shot === 'attack') {
     // Attack dive on the third harbour marker: cockpit sight tracking,
     // tracer live, boost burning, cranes and glittering water below.

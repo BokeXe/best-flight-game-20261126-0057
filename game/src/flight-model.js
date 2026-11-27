@@ -35,11 +35,11 @@ export function stepFlightModel(state, controls, dt, groundHeight) {
   // Control authority grows smoothly with airspeed: the plane answers at
   // every speed, crisply when fast, gently near the stall.
   const speedFrac = Math.min(1, state.speed / 60);
-  const authority = 0.38 + 0.62 * speedFrac * speedFrac * (3 - 2 * speedFrac);
+  const authority = 0.46 + 0.54 * speedFrac * speedFrac * (3 - 2 * speedFrac);
   // Throttle spools toward the lever; an empty tank means no thrust at all.
   // Burn rises steeply with power, so cruising gently stretches the sortie.
   const lever = state.fuel > 0 ? controls.throttle : 0;
-  state.throttle += (lever - state.throttle) * Math.min(1, dt * 2.6);
+  state.throttle += (lever - state.throttle) * Math.min(1, dt * 3.2);
   // Afterburner: a short, loud shove for dives and escapes. Charge drains
   // in about three seconds and refills slowly, so boost is a decision.
   state.boostActive = controls.boost === true && !state.onGround
@@ -53,12 +53,12 @@ export function stepFlightModel(state, controls, dt, groundHeight) {
 
   // Pitch and roll track the stick with a short lag, then settle: no twitch,
   // no wallow. Wings level themselves when the stick is centred.
-  state.pitch += controls.pitch * dt * 0.95 * authority;
+  state.pitch += controls.pitch * dt * 1.05 * authority;
   state.pitch = clamp(state.pitch, -0.62, 0.62);
   if (Math.abs(controls.pitch) < 0.05) state.pitch -= state.pitch * dt * 0.5;
-  state.roll += controls.roll * dt * 1.9 * authority;
+  state.roll += controls.roll * dt * 2.05 * authority;
   state.roll = clamp(state.roll, -1.15, 1.15);
-  if (Math.abs(controls.roll) < 0.05) state.roll -= state.roll * dt * 1.7;
+  if (Math.abs(controls.roll) < 0.05) state.roll -= state.roll * dt * 1.9;
 
   // Banked lift turns the aircraft; rudder trims the nose. Hard turns cost
   // energy: induced drag rises with bank, so steep turns bleed speed.
@@ -67,7 +67,7 @@ export function stepFlightModel(state, controls, dt, groundHeight) {
 
   // Energy: thrust accelerates, drag and climbing bleed speed. A bent
   // airframe makes less thrust, so damage is a reason to head home.
-  const thrust = (state.throttle * 26 + state.boostBlend * 22) * (state.damage > 55 ? 0.82 : 1);
+  const thrust = (state.throttle * 26 + state.boostBlend * 22) * (1 - state.damage * 0.0022);
   const induced = Math.abs(Math.tan(state.roll)) * state.speed * 0.05;
   const drag = 0.0038 * state.speed * state.speed + induced
     + (controls.brake ? 9 : 0) + (state.flapsDown ? 2.6 : 0);
@@ -132,10 +132,12 @@ function resolveGroundContact(state, groundHeight, dt) {
   state.speed = Math.max(0, state.speed - dt * (state.throttle > 0.15 ? 1.5 : 7));
 }
 
-export function refuelIfParked(state, onRunway) {
+export function refuelIfParked(state, onRunway, dt = 1 / 120) {
   if (state.onGround && state.speed < 2 && onRunway) {
-    state.fuel = Math.min(FUEL_CAPACITY, state.fuel + 22);
-    state.damage = Math.max(0, state.damage - 6);
+    // Refuel and repair take parked time, so diverting home is a real
+    // sortie decision rather than an instant reset.
+    state.fuel = Math.min(FUEL_CAPACITY, state.fuel + 14 * dt);
+    state.damage = Math.max(0, state.damage - 3 * dt);
     return true;
   }
   return false;

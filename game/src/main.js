@@ -17,6 +17,18 @@ const canvas = document.getElementById('game-canvas');
 const ctx = canvas.getContext('2d');
 const glCanvas = document.getElementById('gl-canvas');
 
+// Logical view stays 1280x800 for HUD layout and projection; the
+// backing stores render at up to 2x so screenshot scenes and retina
+// displays get clean edges instead of stretched pixels.
+const VIEW_W = 1280;
+const VIEW_H = 800;
+const bootScene = shotSceneFromUrl(window.location.search);
+const RENDER_SCALE = bootScene ? 2 : Math.min(window.devicePixelRatio || 1, 2);
+canvas.width = VIEW_W * RENDER_SCALE;
+canvas.height = VIEW_H * RENDER_SCALE;
+glCanvas.width = VIEW_W * RENDER_SCALE;
+glCanvas.height = VIEW_H * RENDER_SCALE;
+
 // The flight model runs on a fixed 120 Hz clock whatever the display
 // rate; rendering interpolates between the last two simulation states so
 // motion stays smooth without the model ever seeing a ragged dt.
@@ -126,14 +138,20 @@ function stepSimulation(dt, controls) {
   const ground = Math.max(0, terrainHeightAt(state.heights, state.aircraft.x, state.aircraft.z));
   const wasOnGround = state.aircraft.onGround;
   stepFlightModel(state.aircraft, controls, dt, ground);
-  if (!wasOnGround && state.aircraft.onGround && !state.aircraft.crashed) audio.thud();
+  if (!wasOnGround && state.aircraft.onGround && !state.aircraft.crashed) {
+    audio.thud();
+    const quality = state.aircraft.lastTouchdown?.quality;
+    state.flash = quality === 'greased' ? 'GREASED TOUCHDOWN'
+      : quality === 'hard' ? 'HARD ARRIVAL — CHECK AIRFRAME' : 'FIRM ARRIVAL';
+    state.flashUntil = state.time + 1.2;
+  }
   if (state.aircraft.crashed) {
     state.phase = 'results';
     state.mission.resultLines = ['The Sunwing did not survive that arrival', `Score ${state.score} · time ${formatClock(state.missionTime)}`];
     audio.thud();
     return;
   }
-  refuelIfParked(state.aircraft, isOnRunway(state.aircraft));
+  refuelIfParked(state.aircraft, isOnRunway(state.aircraft), dt);
   updateMission(state.mission, state.aircraft, state, dt, state.heights);
   if (state.mission.ringIndex !== undefined && state.mission.ringIndex !== state.lastRingIndex) {
     state.lastRingIndex = state.mission.ringIndex;
@@ -172,12 +190,13 @@ function updateRenderAircraft(alpha) {
 }
 
 function renderGame(frameDt = 1 / 60) {
-  const width = canvas.width, height = canvas.height;
+  const width = VIEW_W, height = VIEW_H;
   const renderAircraft = state.renderAircraft;
   updateChaseCamera(state.camera, renderAircraft, Math.min(frameDt, 0.05), state.cockpitView);
   const fov = 1.02 + (renderAircraft.boostBlend || 0) * 0.17;
   const view = buildViewMatrix(state.camera, width, height, state.view, fov);
   state.view = view;
+  ctx.setTransform(RENDER_SCALE, 0, 0, RENDER_SCALE, 0, 0);
   ctx.clearRect(0, 0, width, height);
   if (worldRenderer) worldRenderer.render(state, view);
   else drawWebglFallback(width, height);
@@ -276,7 +295,7 @@ function drawResultsScreen(width, height) {
 }
 
 // Boot: shot scenes run a fixed number of steps, then hold the frame.
-const scene = shotSceneFromUrl(window.location.search);
+const scene = bootScene;
 if (scene) {
   state.seed = scene.seed;
   state.heights = buildCoastalHeightfield(scene.seed);

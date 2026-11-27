@@ -66,7 +66,7 @@ class GeometryBuilder {
     }
   }
 
-  cylinder(cx, cy, cz, radius, height, color, segments = 10, emissive = 0) {
+  cylinder(cx, cy, cz, radius, height, color, segments = 18, emissive = 0) {
     const y0 = cy - height / 2, y1 = cy + height / 2;
     for (let i = 0; i < segments; i++) {
       const a0 = (i / segments) * Math.PI * 2;
@@ -158,9 +158,13 @@ export function buildCityGeometry(buildings, heights) {
     if (building.height > 24) {
       const tankX = building.x + ((roofSeed % 7) - 3) * 2.2;
       const tankZ = building.z + ((roofSeed % 5) - 2) * 2.6;
-      b.cylinder(tankX, base + building.height + 3.4, tankZ, 3.2, 6.8, [0.5, 0.4, 0.34], 8);
+      b.cylinder(tankX, base + building.height + 3.4, tankZ, 3.2, 6.8, [0.5, 0.4, 0.34], 14);
       b.box(building.x - building.width * 0.22, base + building.height + 2,
         building.z + building.depth * 0.2, 7, 4, 6, [0.4, 0.38, 0.44]);
+      // A pale cornice slab catches the last sun and separates each
+      // tower roof from its facade in the chase view.
+      b.box(building.x, base + building.height + 0.7, building.z,
+        building.width + 1.6, 1.4, building.depth + 1.6, [0.78, 0.68, 0.58]);
     }
     if (building.tower) {
       b.box(building.x + building.width * 0.24, base + building.height + 1.6,

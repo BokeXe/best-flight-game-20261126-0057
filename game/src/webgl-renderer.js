@@ -564,7 +564,7 @@ function bindBillboards(gl, program, billboards) {
 // between them, so a tower reads as a building at thumbnail size instead
 // of dissolving into checkerboard noise.
 function makeWindowsTexture(gl) {
-  const size = 256;
+  const size = 512;
   const canvas = document.createElement('canvas');
   canvas.width = size; canvas.height = size;
   const ctx = canvas.getContext('2d');
@@ -579,26 +579,33 @@ function makeWindowsTexture(gl) {
     seed = (seed * 1664525 + 1013904223) >>> 0;
     return seed / 4294967296;
   };
-  const cols = 4, rows = 6;
+  const cols = 8, rows = 12;
   const cw = size / cols, ch = size / rows;
   for (let r = 0; r < rows; r++) {
     // A faint floor slab line keeps storeys legible from a distance.
-    ctx.fillStyle = 'rgba(214,190,160,0.14)';
-    ctx.fillRect(0, r * ch, size, 2);
+    ctx.fillStyle = 'rgba(214,190,160,0.16)';
+    ctx.fillRect(0, r * ch, size, 3);
+    ctx.fillStyle = 'rgba(20,16,28,0.22)';
+    ctx.fillRect(0, r * ch + 3, size, 2);
     for (let c = 0; c < cols; c++) {
       const lit = rand();
-      const wx = c * cw + cw * 0.27;
-      const wy = r * ch + ch * 0.25;
-      const ww = cw * 0.46;
-      const wh = ch * 0.5;
+      const wx = c * cw + cw * 0.24;
+      const wy = r * ch + ch * 0.22;
+      const ww = cw * 0.52;
+      const wh = ch * 0.54;
       if (lit < 0.22) ctx.fillStyle = '#ffb85c';
       else if (lit < 0.27) ctx.fillStyle = '#ffe6ae';
       else if (lit < 0.32) ctx.fillStyle = '#8fa3c4';
       else ctx.fillStyle = '#241f30';
       ctx.fillRect(wx, wy, ww, wh);
+      // A centre mullion and sill shadow make each pane read as glass
+      // set into a facade, not as a flat coloured tile.
+      ctx.fillStyle = 'rgba(24,18,32,0.5)';
+      ctx.fillRect(wx + ww / 2 - 1, wy, 2, wh);
+      ctx.fillRect(wx, wy + wh - 3, ww, 3);
       if (lit < 0.32) {
-        ctx.fillStyle = 'rgba(255,255,255,0.20)';
-        ctx.fillRect(wx, wy, ww, 3);
+        ctx.fillStyle = 'rgba(255,255,255,0.22)';
+        ctx.fillRect(wx, wy, ww, 4);
       }
     }
   }
@@ -606,11 +613,11 @@ function makeWindowsTexture(gl) {
 }
 
 function makeCloudTexture(gl) {
-  const size = 128;
+  const size = 256;
   const canvas = document.createElement('canvas');
   canvas.width = size; canvas.height = size;
   const ctx = canvas.getContext('2d');
-  const blobs = [[64, 70, 46], [40, 76, 30], [90, 74, 32], [58, 58, 30], [78, 60, 26]];
+  const blobs = [[128, 140, 92], [80, 152, 60], [180, 148, 64], [116, 116, 60], [156, 120, 52], [98, 132, 42], [168, 104, 36]];
   for (const [x, y, r] of blobs) {
     const grad = ctx.createRadialGradient(x, y, 2, x, y, r);
     grad.addColorStop(0, 'rgba(255,255,255,0.85)');
@@ -630,5 +637,10 @@ function uploadTexture(gl, canvas, repeat) {
   gl.generateMipmap(gl.TEXTURE_2D);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  const aniso = gl.getExtension('EXT_texture_filter_anisotropic');
+  if (aniso) {
+    const maxAniso = gl.getParameter(aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT);
+    gl.texParameterf(gl.TEXTURE_2D, aniso.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(8, maxAniso));
+  }
   return texture;
 }

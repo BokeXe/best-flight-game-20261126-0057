@@ -56,7 +56,7 @@ export function buildTraffic(seed) {
   ];
   const cars = [];
   for (const avenueX of AVENUES) {
-    for (let i = 0; i < 11; i++) {
+    for (let i = 0; i < 15; i++) {
       const dir = random() < 0.5 ? 1 : -1;
       cars.push({
         axis: 'z', road: avenueX, lane: dir > 0 ? 5.5 : -5.5, dir,
@@ -66,7 +66,7 @@ export function buildTraffic(seed) {
     }
   }
   for (const streetZ of CROSS_STREETS) {
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 8; i++) {
       const dir = random() < 0.5 ? 1 : -1;
       cars.push({
         axis: 'x', road: streetZ, lane: dir > 0 ? -5 : 5, dir,
@@ -103,9 +103,9 @@ export function trafficPose(car, time, heights, out = null) {
 export function buildBoats(seed) {
   const random = makeSeededRandom(seed ^ 0xb0a75);
   const boats = [];
-  for (let i = 0; i < 7; i++) {
+  for (let i = 0; i < 10; i++) {
     boats.push({
-      laneX: -620 - i * 130 - random() * 60,
+      laneX: -620 - i * 105 - random() * 60,
       dir: i % 2 ? 1 : -1,
       speed: 4 + random() * 3.5,
       offset: -1500 + random() * 3000,
@@ -299,8 +299,8 @@ export function buildCityBuildings(seed) {
   // Height peaks in the downtown cluster and along the waterfront hotels,
   // then falls away to low residential blocks inland and to the south.
   for (const avenueX of avenues) {
-    for (let z = -1040; z <= 680; z += 92) {
-      if (random() < 0.16) continue; // a park, plaza or side street gap
+    for (let z = -1040; z <= 680; z += 76) {
+      if (random() < 0.10) continue; // a park, plaza or side street gap
       const x = avenueX + (random() - 0.5) * 22;
       const zz = z + (random() - 0.5) * 20;
       const downtown = Math.exp(-Math.pow((x - 150) / 250, 2)) * Math.exp(-Math.pow((zz + 300) / 330, 2));
@@ -318,7 +318,7 @@ export function buildCityBuildings(seed) {
       });
       // A second, smaller block behind many lots layers the skyline so the
       // city reads deep instead of one row of boxes along each avenue.
-      if (random() < 0.55) {
+      if (random() < 0.72) {
         const backHeight = height * (0.4 + random() * 0.45) + 6;
         buildings.push({
           x: x + 34 + random() * 14, z: zz + (random() - 0.5) * 30,
@@ -368,7 +368,7 @@ export function buildCityBuildings(seed) {
 export function buildCloudField(seed) {
   const random = makeSeededRandom(seed ^ 0x51ab3);
   const clouds = [];
-  for (let i = 0; i < 42; i++) {
+  for (let i = 0; i < 54; i++) {
     const layer = random();
     clouds.push({
       x: (random() - 0.5) * WORLD_SIZE * 1.25,
