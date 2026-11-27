@@ -3,7 +3,9 @@
 // The airframe itself is true 3D geometry in gl-aircraft.js.
 
 export function drawCockpitPanel(ctx, width, height, aircraft, instruments) {
-  const panelTop = height * 0.62;
+  // The panel sits low: instruments stay big and lit, but the pilot
+  // keeps most of the frame for the coast, the target and the sky.
+  const panelTop = height * 0.69;
   // Blended V-wing nose above the panel: a low pod spine with the two
   // wing roots sweeping away at the frame edges.
   ctx.fillStyle = 'rgba(64,48,66,0.55)';

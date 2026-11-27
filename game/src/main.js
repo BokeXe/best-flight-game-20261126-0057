@@ -282,7 +282,7 @@ if (scene) {
   state.buildings = buildCityBuildings(scene.seed);
   state.clouds = buildCloudField(scene.seed);
   state.traffic = buildTraffic(scene.seed);
-  const shotMission = scene.shot === 'cover' ? 'canyon'
+  const shotMission = scene.shot === 'cover' ? 'rings'
     : scene.shot === 'landing' ? 'landing'
       : scene.shot === 'attack' ? MISSION_ATTACK : 'cargo';
   state.missionKind = shotMission;

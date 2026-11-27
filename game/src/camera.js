@@ -17,7 +17,10 @@ export function updateChaseCamera(camera, aircraft, dt, cockpitView) {
     return camera;
   }
   const boost = aircraft.boostBlend || 0;
-  const back = 27 + boost * 5.5, up = 7.6 + boost * 1.3;
+  // A close chase keeps the Sunwing large in frame — the pilot reads
+  // bank and pitch off the airframe itself, and boost still pulls the
+  // camera back so speed stays legible.
+  const back = 20.5 + boost * 5, up = 6 + boost * 1.2;
   const tx = aircraft.x - Math.sin(aircraft.heading) * back;
   const tz = aircraft.z + Math.cos(aircraft.heading) * back;
   const ty = aircraft.y + up;

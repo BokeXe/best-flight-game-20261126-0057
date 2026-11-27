@@ -534,30 +534,47 @@ function bindBillboards(gl, program, billboards) {
   bindPositions(gl, program, billboards.alphas, 'aAlpha');
 }
 
-// A repeating window sheet: dark facade cells with warm lit windows in two
-// tones, so every building face glows like dusk offices and apartments.
+// A repeating window sheet: calm dusk facades with a sparse grid of warm
+// lit windows. Windows stay small inside their cells with dark glass
+// between them, so a tower reads as a building at thumbnail size instead
+// of dissolving into checkerboard noise.
 function makeWindowsTexture(gl) {
   const size = 256;
   const canvas = document.createElement('canvas');
   canvas.width = size; canvas.height = size;
   const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#241f2e';
+  const facade = ctx.createLinearGradient(0, 0, 0, size);
+  facade.addColorStop(0, '#3a3348');
+  facade.addColorStop(0.55, '#2e283e');
+  facade.addColorStop(1, '#262032');
+  ctx.fillStyle = facade;
   ctx.fillRect(0, 0, size, size);
-  let seed = 1234567;
+  let seed = 987654321;
   const rand = () => {
     seed = (seed * 1664525 + 1013904223) >>> 0;
     return seed / 4294967296;
   };
-  const cols = 6, rows = 8;
+  const cols = 5, rows = 7;
   const cw = size / cols, ch = size / rows;
   for (let r = 0; r < rows; r++) {
+    // A faint floor slab line keeps storeys legible from a distance.
+    ctx.fillStyle = 'rgba(214,190,160,0.10)';
+    ctx.fillRect(0, r * ch, size, 2);
     for (let c = 0; c < cols; c++) {
       const lit = rand();
-      if (lit < 0.42) ctx.fillStyle = '#ffb347';
-      else if (lit < 0.58) ctx.fillStyle = '#ffe3a3';
-      else if (lit < 0.66) ctx.fillStyle = '#7d8aa8';
-      else continue;
-      ctx.fillRect(c * cw + 4, r * ch + 4, cw - 8, ch - 8);
+      const wx = c * cw + cw * 0.24;
+      const wy = r * ch + ch * 0.22;
+      const ww = cw * 0.52;
+      const wh = ch * 0.56;
+      if (lit < 0.30) ctx.fillStyle = '#ffb85c';
+      else if (lit < 0.38) ctx.fillStyle = '#ffe6ae';
+      else if (lit < 0.44) ctx.fillStyle = '#8fa3c4';
+      else ctx.fillStyle = '#1c1826';
+      ctx.fillRect(wx, wy, ww, wh);
+      if (lit < 0.44) {
+        ctx.fillStyle = 'rgba(255,255,255,0.20)';
+        ctx.fillRect(wx, wy, ww, 3);
+      }
     }
   }
   return uploadTexture(gl, canvas, true);

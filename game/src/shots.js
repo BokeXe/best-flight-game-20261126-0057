@@ -14,28 +14,28 @@ export function shotSceneFromUrl(search) {
 export function applyShotScene(state, scene) {
   const a = state.aircraft;
   if (scene.shot === 'cover') {
-    // Chase view banking hard over the downtown avenues: traffic and
-    // streetlights below, towers either side, the canyon gate ahead,
-    // sunset sea beyond the skyline, boost lit on the gauges.
-    state.missionKind = 'canyon';
+    // The cover frame: chase view banked over the shoreline toward the
+    // second ring, the Sunwing large in frame, lit skyline below right,
+    // sunset sea and the ring ahead — the whole game in one glance.
+    state.missionKind = 'rings';
     Object.assign(a, {
-      x: 120, y: 88, z: 700, heading: 0.1, pitch: -0.02, roll: -0.5,
-      speed: 60, throttle: 0.7, boostCharge: 0.65, boostBlend: 0.35,
+      x: 145, y: 218, z: 75, heading: -0.6, pitch: 0.02, roll: -0.38,
+      speed: 56, throttle: 0.66, boostCharge: 0.8, boostBlend: 0.2,
       onGround: false, gearDown: false,
     });
     state.missionTime = 42;
-    state.score = 900;
-    state.cash = 540;
-    state.mission.ringIndex = 0;
-    state.mission.target = state.mission.rings[0];
-    state.mission.bannerText = 'Gate 1 of 9 — in the canyon, bonus live';
+    state.score = 300;
+    state.cash = 180;
+    state.mission.ringIndex = 1;
+    state.mission.target = state.mission.rings[1];
+    state.mission.bannerText = 'Ring 2 of 8 — over the skyline to the sunset sea';
   } else if (scene.shot === 'attack') {
     // Attack dive on the third harbour marker: cockpit sight tracking,
     // tracer live, boost burning, cranes and glittering water below.
     state.missionKind = 'attack';
     state.cockpitView = true;
     Object.assign(a, {
-      x: -60, y: 200, z: 640, heading: -0.84, pitch: -0.32, roll: -0.22,
+      x: -60, y: 185, z: 640, heading: -0.84, pitch: -0.24, roll: -0.18,
       speed: 76, throttle: 0.84, boostCharge: 0.6, boostBlend: 0.75,
       onGround: false, gearDown: false,
     });
@@ -57,9 +57,9 @@ export function applyShotScene(state, scene) {
     // Cargo away over the harbour: crate under its parachute ahead of the
     // aircraft, drop beacon, cranes and sunset sea below.
     state.missionKind = 'cargo';
-    Object.assign(a, { x: 120, y: 235, z: 330, heading: -1.22, pitch: 0.0, roll: -0.18, speed: 50, throttle: 0.5, onGround: false, gearDown: false });
+    Object.assign(a, { x: 40, y: 190, z: 330, heading: -1.22, pitch: 0.0, roll: -0.18, speed: 50, throttle: 0.5, onGround: false, gearDown: false });
     state.mission.dropped = true;
-    state.mission.crate = { x: -120, y: 210, z: 290, vx: -8, vy: -7, vz: -3 };
+    state.mission.crate = { x: -150, y: 175, z: 300, vx: -8, vy: -7, vz: -3 };
     state.mission.bannerText = 'Crate away — watch it fall';
     state.missionTime = 54;
     state.score = 450;

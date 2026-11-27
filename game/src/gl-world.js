@@ -51,10 +51,16 @@ class GeometryBuilder {
       { n: [0, 1, 0], pts: [[x0, y1, z0], [x1, y1, z0], [x1, y1, z1], [x0, y1, z1]], u: w, roof: true },
     ];
     for (const face of faces) {
+      // Roofs catch the last sun: lift them toward warm grey so a tower
+      // top reads as a roof, not as another dark facade. Window UVs use
+      // wide repeats, so each lit window is a real storey-sized pane.
+      const faceColor = face.roof
+        ? [Math.min(1, color[0] * 1.35 + 0.16), Math.min(1, color[1] * 1.3 + 0.13), Math.min(1, color[2] * 1.2 + 0.1)]
+        : color;
       const ids = face.pts.map(([x, y, z], i) => {
-        const u = windowScale && !face.roof ? (i === 1 || i === 2 ? face.u / 11 : 0) : 0;
-        const v = windowScale && !face.roof ? (i >= 2 ? h / 7 : 0) : 0;
-        return this.vertex(x, y, z, face.n[0], face.n[1], face.n[2], color, u, v);
+        const u = windowScale && !face.roof ? (i === 1 || i === 2 ? face.u / 21 : 0) : 0;
+        const v = windowScale && !face.roof ? (i >= 2 ? h / 14 : 0) : 0;
+        return this.vertex(x, y, z, face.n[0], face.n[1], face.n[2], faceColor, u, v);
       });
       this.quad(ids[0], ids[1], ids[2], ids[3]);
     }
@@ -129,12 +135,21 @@ function urbanAmount(x, z) {
   return Math.max(0, 1 - d);
 }
 
+// Three facade families — warm sand, slate and terracotta — so the
+// skyline has variety a pilot can navigate by, not one repeated tint.
+const FACADE_FAMILIES = [
+  [0.62, 0.5, 0.4],
+  [0.42, 0.47, 0.58],
+  [0.6, 0.42, 0.36],
+];
+
 export function buildCityGeometry(buildings, heights) {
   const b = new GeometryBuilder();
   for (const building of buildings) {
     const base = terrainHeightAt(heights, building.x, building.z);
-    const warm = 0.36 + (building.hue % 17) / 90;
-    const color = [warm, warm * 0.82, warm * 1.18];
+    const family = FACADE_FAMILIES[Math.floor(Math.abs(building.hue)) % FACADE_FAMILIES.length];
+    const lift = 0.85 + ((building.hue * 7) % 13) / 40;
+    const color = family.map((c) => Math.min(1, c * lift));
     b.box(building.x, base + building.height / 2, building.z,
       building.width, building.height, building.depth, color, 1);
     if (building.landmark) {
