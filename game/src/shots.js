@@ -14,12 +14,12 @@ export function shotSceneFromUrl(search) {
 export function applyShotScene(state, scene) {
   const a = state.aircraft;
   if (scene.shot === 'cover') {
-    // The cover frame: a low chase shot threading the avenue canyon
-    // between lit towers toward the sunset sea — Sunwing large in
-    // frame, gate ahead, traffic below, glitter path on the water.
+    // The cover frame: a low chase shot down the avenue canyon itself,
+    // Sunwing large and clear of the rooftops, one gate ahead over the
+    // street, lit towers either side and the sunset sea beyond.
     state.missionKind = 'canyon';
     Object.assign(a, {
-      x: 150, y: 88, z: 300, heading: -0.55, pitch: 0.01, roll: -0.3,
+      x: 105, y: 104, z: 315, heading: -0.42, pitch: 0.01, roll: -0.22,
       speed: 58, throttle: 0.7, boostCharge: 0.8, boostBlend: 0.3,
       onGround: false, gearDown: false,
     });
@@ -60,7 +60,9 @@ export function applyShotScene(state, scene) {
     state.missionKind = 'cargo';
     Object.assign(a, { x: 40, y: 190, z: 330, heading: -1.22, pitch: 0.0, roll: -0.18, speed: 50, throttle: 0.5, onGround: false, gearDown: false });
     state.mission.dropped = true;
-    state.mission.crate = { x: -150, y: 175, z: 300, vx: -8, vy: -7, vz: -3 };
+    // The crate falls just ahead of the Sunwing, inside the chase
+    // frame with the harbour beacon below it.
+    state.mission.crate = { x: -55, y: 172, z: 272, vx: -8, vy: -7, vz: -3 };
     state.mission.bannerText = 'Crate away — watch it fall';
     state.missionTime = 54;
     state.score = 450;

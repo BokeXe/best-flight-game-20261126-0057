@@ -10,7 +10,8 @@ flight game" bounty ($500 in USDC, top 50).
 
 Fly the Sunwing over a seeded coastal heightfield — sunset sea, beach
 promenade, a lit skyline with streetlights and moving traffic, a working
-harbour and a coastal runway — through seven missions: thread eight target
+harbour and a coastal runway with PAPI glidepath lights, apron and
+taxiway — through seven missions: thread eight target
 rings over the skyline, drop cargo onto the harbour beacon, stop on the
 runway touchdown mark, thread the downtown Avenue Canyon gates, run a
 four-stop courier chain, roam in Free Flight, or dive on harbour training

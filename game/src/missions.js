@@ -1,6 +1,7 @@
-// missions.js — three golden-hour sorties over Solmere Coast: a skyline
-// ring course, a harbour cargo drop and a precision landing at the coastal
-// runway, each with its own goal, scoring and end state.
+// missions.js — seven golden-hour sorties over Solmere Coast: a skyline
+// ring course, a harbour cargo drop, a precision landing at the coastal
+// runway, an avenue canyon, a four-stop courier chain, free flight and a
+// harbour attack run, each with its own goal, scoring and end state.
 
 import { RUNWAY, HARBOR, LIGHTHOUSE, STADIUM, districtAt, terrainHeightAt } from './terrain.js';
 

@@ -58,8 +58,8 @@ class GeometryBuilder {
         ? [Math.min(1, color[0] * 1.35 + 0.16), Math.min(1, color[1] * 1.3 + 0.13), Math.min(1, color[2] * 1.2 + 0.1)]
         : color;
       const ids = face.pts.map(([x, y, z], i) => {
-        const u = windowScale && !face.roof ? (i === 1 || i === 2 ? face.u / 21 : 0) : 0;
-        const v = windowScale && !face.roof ? (i >= 2 ? h / 14 : 0) : 0;
+        const u = windowScale && !face.roof ? (i === 1 || i === 2 ? face.u / 24 : 0) : 0;
+        const v = windowScale && !face.roof ? (i >= 2 ? h / 16 : 0) : 0;
         return this.vertex(x, y, z, face.n[0], face.n[1], face.n[2], faceColor, u, v);
       });
       this.quad(ids[0], ids[1], ids[2], ids[3]);
@@ -205,6 +205,17 @@ export function buildRunwayGeometry() {
   // Touchdown zone bars the landing mission aims at.
   stripe(b, RUNWAY.x - 11, y + 0.05, RUNWAY.z0 + 178, 22, 3.4, [1, 0.72, 0.25]);
   stripe(b, RUNWAY.x - 11, y + 0.05, RUNWAY.z0 + 202, 22, 3.4, [1, 0.72, 0.25]);
+  // PAPI glidepath lights beside the touchdown zone: two white, two
+  // red on the glide, the detail a pilot reads on short final.
+  for (let i = 0; i < 4; i++) {
+    b.box(x0 - 9 - i * 5, y + 1.1, RUNWAY.z0 + 190, 3.4, 2.2, 1.4,
+      i < 2 ? [1, 0.98, 0.92] : [1, 0.22, 0.16]);
+  }
+  // Apron and taxiway east of the strip, so the airfield reads as a
+  // working field with somewhere to park, refuel and repair.
+  stripe(b, x1 + 14, y - 0.02, RUNWAY.z0 + 120, 70, 190, [0.24, 0.24, 0.3]);
+  stripe(b, x1 + 2, y + 0.01, RUNWAY.z0 + 200, 14, 12, [0.24, 0.24, 0.3]);
+  stripe(b, x1 + 44, y + 0.03, RUNWAY.z0 + 128, 2, 174, [0.95, 0.75, 0.3]);
   // Approach light gantries south of the threshold.
   for (let i = 1; i <= 6; i++) {
     const z = RUNWAY.z0 - i * 42;

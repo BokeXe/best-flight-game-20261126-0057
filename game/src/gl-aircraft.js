@@ -102,6 +102,14 @@ export function buildAircraftGeometry() {
       [side * 7.6, 0.3, 3.1],
       [side * 0.9, 0.12, 2.2],
     ], 0.22, HULL, HULL_SHADE);
+    // Accent leading-edge stripe, so each wing reads as a built panel
+    // with a painted edge rather than one flat grey slab.
+    b.panel([
+      [side * 0.9, 0.2, -2.2],
+      [side * 7.4, 0.38, 1.75],
+      [side * 7.4, 0.38, 2.05],
+      [side * 0.9, 0.2, -1.85],
+    ], 0.06, ACCENT, ACCENT);
     // Accent tip cap so the V reads at a glance in the chase view.
     b.panel([
       [side * 6.7, 0.36, 1.45],
@@ -122,6 +130,14 @@ export function buildAircraftGeometry() {
   b.pod(-3.4, 2.6, 0.85, 0.62, 0.1, HULL);
   // Canopy: a tinted teardrop over the pod's forward half.
   b.pod(-2.5, 0.4, 0.5, 0.34, 0.52, CANOPY);
+  // Dorsal spine strip behind the canopy, tying the pod into the
+  // trailing-edge notch where the exhausts sit.
+  b.panel([
+    [-0.16, 0.62, 0.5],
+    [0.16, 0.62, 0.5],
+    [0.13, 0.55, 2.3],
+    [-0.13, 0.55, 2.3],
+  ], 0.05, ACCENT, ACCENT);
   // Twin exhaust rings at the notch, emissive with throttle in the shader
   // via the renderer's per-draw emissive scale on a separate small mesh.
   return b.build();
@@ -181,14 +197,15 @@ export function buildNavLightPoints() {
       0, 0.35, 2.7, // tail white
     ]),
     colors: new Float32Array([1, 0.15, 0.12, 0.2, 1, 0.35, 1, 1, 1]),
-    sizes: new Float32Array([3.2, 3.2, 2.6]),
+    sizes: new Float32Array([4.4, 4.4, 3.6]),
   };
 }
 
 // A torus for the mission rings, built once and instanced by model matrix.
+// The tube stays slim so a gate reads as a hoop to thread, not a wall.
 export function buildRingGeometry(radius) {
   const b = new PartBuilder();
-  const tube = 1.5, ringSegs = 36, tubeSegs = 8;
+  const tube = 1.1, ringSegs = 36, tubeSegs = 8;
   const color = [1, 0.78, 0.25];
   const ids = [];
   for (let i = 0; i <= ringSegs; i++) {

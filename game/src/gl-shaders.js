@@ -42,9 +42,11 @@ void main() {
   float p20 = p10 * p10;
   float p40 = p20 * p20;
   float p80 = p40 * p40;
-  col += vec3(1.0, 0.55, 0.22) * p10 * 0.45;
-  col += vec3(1.0, 0.72, 0.35) * (p80 * p10) * 0.8;
-  col += vec3(1.0, 0.9, 0.65) * smoothstep(0.99955, 0.99985, sunAmount) * 1.25;
+  // The broad halo stays modest so a frame flown into the sunset keeps
+  // its sky gradient and sea glitter instead of washing out to white.
+  col += vec3(1.0, 0.55, 0.22) * p10 * 0.3;
+  col += vec3(1.0, 0.72, 0.35) * (p80 * p10) * 0.55;
+  col += vec3(1.0, 0.9, 0.65) * smoothstep(0.9997, 0.99992, sunAmount) * 1.05;
   float star = 0.0;
   if (h > 0.25) {
     vec3 cell = floor(dir * 160.0);
@@ -157,7 +159,10 @@ void main() {
   vec3 col = vColor * (ambient + sunlight);
   if (uUseWindows > 0.5) {
     vec3 win = texture2D(uWindows, vUv).rgb;
-    col = col * 0.5 + win * (0.42 + diffuse * 0.22);
+    // Let the building's own facade colour carry more of the wall so
+    // sand, slate and terracotta towers stay distinct under the window
+    // sheet instead of flattening into one dark slab.
+    col = col * 0.66 + win * (0.32 + diffuse * 0.18);
   }
   col += vColor * vEmissive;
   col *= 1.04;

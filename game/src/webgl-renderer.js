@@ -228,7 +228,11 @@ class WebglRenderer {
   drawMissionObjects(state, viewProj, camPos) {
     const mission = state.mission;
     if (state.missionKind === 'canyon' || state.missionKind === 'rings') {
-      for (let i = 0; i < mission.rings.length; i++) {
+      // Draw the gate to fly next and one preview beyond it. Gates
+      // already flown and the far tail of the course stay off screen,
+      // so the target ahead reads as one clear ring, not a tangle.
+      const lastShown = Math.min(mission.rings.length - 1, mission.ringIndex + 1);
+      for (let i = mission.ringIndex; i <= lastShown; i++) {
         const ring = mission.rings[i];
         const prev = mission.rings[Math.max(0, i - 1)];
         const next = mission.rings[Math.min(mission.rings.length - 1, i + 1)];
@@ -565,9 +569,9 @@ function makeWindowsTexture(gl) {
   canvas.width = size; canvas.height = size;
   const ctx = canvas.getContext('2d');
   const facade = ctx.createLinearGradient(0, 0, 0, size);
-  facade.addColorStop(0, '#3a3348');
-  facade.addColorStop(0.55, '#2e283e');
-  facade.addColorStop(1, '#262032');
+  facade.addColorStop(0, '#4c445c');
+  facade.addColorStop(0.55, '#3d364c');
+  facade.addColorStop(1, '#332c40');
   ctx.fillStyle = facade;
   ctx.fillRect(0, 0, size, size);
   let seed = 987654321;
@@ -575,24 +579,24 @@ function makeWindowsTexture(gl) {
     seed = (seed * 1664525 + 1013904223) >>> 0;
     return seed / 4294967296;
   };
-  const cols = 5, rows = 7;
+  const cols = 4, rows = 6;
   const cw = size / cols, ch = size / rows;
   for (let r = 0; r < rows; r++) {
     // A faint floor slab line keeps storeys legible from a distance.
-    ctx.fillStyle = 'rgba(214,190,160,0.10)';
+    ctx.fillStyle = 'rgba(214,190,160,0.14)';
     ctx.fillRect(0, r * ch, size, 2);
     for (let c = 0; c < cols; c++) {
       const lit = rand();
-      const wx = c * cw + cw * 0.24;
-      const wy = r * ch + ch * 0.22;
-      const ww = cw * 0.52;
-      const wh = ch * 0.56;
-      if (lit < 0.30) ctx.fillStyle = '#ffb85c';
-      else if (lit < 0.38) ctx.fillStyle = '#ffe6ae';
-      else if (lit < 0.44) ctx.fillStyle = '#8fa3c4';
-      else ctx.fillStyle = '#1c1826';
+      const wx = c * cw + cw * 0.27;
+      const wy = r * ch + ch * 0.25;
+      const ww = cw * 0.46;
+      const wh = ch * 0.5;
+      if (lit < 0.22) ctx.fillStyle = '#ffb85c';
+      else if (lit < 0.27) ctx.fillStyle = '#ffe6ae';
+      else if (lit < 0.32) ctx.fillStyle = '#8fa3c4';
+      else ctx.fillStyle = '#241f30';
       ctx.fillRect(wx, wy, ww, wh);
-      if (lit < 0.44) {
+      if (lit < 0.32) {
         ctx.fillStyle = 'rgba(255,255,255,0.20)';
         ctx.fillRect(wx, wy, ww, 3);
       }
